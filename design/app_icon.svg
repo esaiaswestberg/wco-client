@@ -1,0 +1,17 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+  <!-- Full White Background -->
+  <rect width="1080" height="1080" fill="#FFFFFF" />
+  
+  <!-- Centered Faceted Play Crystal -->
+  <g>
+    <!-- Left Facet (Base) - Mid-Dark Green -->
+    <!-- Centering a 520px wide triangle: Left at 280, Tip at 800 -->
+    <path d="M280 240 L280 840 L480 540 Z" fill="#00C853" />
+    
+    <!-- Top Right Facet - Brightest Green -->
+    <path d="M280 240 L800 540 L480 540 Z" fill="#00E676" />
+    
+    <!-- Bottom Right Facet - Darkest Green (Shadow) -->
+    <path d="M280 840 L800 540 L480 540 Z" fill="#009624" />
+  </g>
+</svg>

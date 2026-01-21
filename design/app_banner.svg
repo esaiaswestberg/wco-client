@@ -1,0 +1,13 @@
+<svg width="320" height="180" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg">
+  <!-- Full White Background -->
+  <rect width="320" height="180" fill="#FFFFFF" />
+  
+  <!-- Centered Faceted Logo (Scaled) -->
+  <!-- Center of 320x180 is (160, 90). The icon is 1080x1080. -->
+  <!-- Scale 0.15 of 1080 is 162. Offset = (320-162)/2 = 79, (180-162)/2 = 9 -->
+  <g transform="translate(79, 9) scale(0.15)">
+    <path d="M280 240 L280 840 L480 540 Z" fill="#00C853" />
+    <path d="M280 240 L800 540 L480 540 Z" fill="#00E676" />
+    <path d="M280 840 L800 540 L480 540 Z" fill="#009624" />
+  </g>
+</svg>
