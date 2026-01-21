@@ -1,0 +1,22 @@
+session:
+  name: wco-client
+  windows:
+    - name: wco-client
+      panes:
+        - name: gemini
+          commands:
+            - bun i -g @google/gemini-cli
+            - clear
+            - gemini
+        - name: emulator-log
+          commands:
+            - clear
+            - adb logcat -s WCO_TV WCO_TV_JS WCO_TV_PLAYER
+        - name: project
+          command: clear
+      layout:
+        columns:
+          - gemini
+          - rows:
+            - emulator-log
+            - project
