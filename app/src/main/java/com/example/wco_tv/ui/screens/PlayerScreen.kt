@@ -1,14 +1,22 @@
 package com.example.wco_tv.ui.screens
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -16,9 +24,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -35,13 +48,21 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface as TvSurface
 import androidx.tv.material3.Text
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.compose.material3.Surface
 import com.example.wco_tv.CinematicAccent
+import com.example.wco_tv.CinematicSurface
 import com.example.wco_tv.CinematicText
 import com.example.wco_tv.WORKING_USER_AGENT
 import com.example.wco_tv.data.local.CacheManager
 import com.example.wco_tv.data.model.VideoQuality
 import kotlinx.coroutines.delay
+
+enum class SettingsTab {
+    Main, Quality, Speed
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -58,6 +79,11 @@ fun PlayerScreen(
     var currentUrl by remember { mutableStateOf(videoUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isEnded by remember { mutableStateOf(false) }
+
+    // Settings State
+    var isSettingsOpen by remember { mutableStateOf(false) }
+    var activeSettingsTab by remember { mutableStateOf(SettingsTab.Main) }
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
 
     // Player State for UI
     var isPlaying by remember { mutableStateOf(false) }
@@ -130,6 +156,8 @@ fun PlayerScreen(
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
         isEnded = false
+        // Re-apply speed on quality change
+        exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
     // Player Listeners
@@ -223,7 +251,29 @@ fun PlayerScreen(
                     exoPlayer.seekTo(newPosition)
                     playbackPosition = newPosition
                 },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                onSettingsClick = {
+                    isSettingsOpen = true
+                    activeSettingsTab = SettingsTab.Main
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .focusProperties { canFocus = !isSettingsOpen }
+            )
+
+            // Settings Menu Side Panel
+            SettingsMenu(
+                isOpen = isSettingsOpen,
+                activeTab = activeSettingsTab,
+                onClose = { isSettingsOpen = false },
+                onTabChange = { activeSettingsTab = it },
+                qualities = qualities,
+                currentUrl = currentUrl,
+                onQualitySelect = { currentUrl = it },
+                currentSpeed = playbackSpeed,
+                onSpeedSelect = {
+                    playbackSpeed = it
+                    exoPlayer.playbackParameters = PlaybackParameters(it)
+                }
             )
         }
     }
@@ -238,6 +288,7 @@ fun PlayerControls(
     formattedTime: String,
     onTogglePlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
@@ -339,7 +390,7 @@ fun PlayerControls(
                 Spacer(modifier = Modifier.weight(1f))
 
                 // Cog button
-                IconButton(onClick = { /* Design only */ }) {
+                IconButton(onClick = onSettingsClick) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Settings",
@@ -347,6 +398,191 @@ fun PlayerControls(
                         modifier = Modifier.size(32.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingsMenu(
+    isOpen: Boolean,
+    activeTab: SettingsTab,
+    onClose: () -> Unit,
+    onTabChange: (SettingsTab) -> Unit,
+    qualities: List<VideoQuality>,
+    currentUrl: String,
+    onQualitySelect: (String) -> Unit,
+    currentSpeed: Float,
+    onSpeedSelect: (Float) -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isOpen) {
+        if (isOpen) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+        AnimatedVisibility(
+            visible = isOpen,
+            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(350.dp)
+                .clickable(enabled = false) {} // Prevent click-through
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .focusRequester(focusRequester)
+                    .onKeyEvent {
+                        if (it.key == Key.Back && it.type == KeyEventType.KeyDown) {
+                            if (activeTab == SettingsTab.Main) {
+                                onClose()
+                            } else {
+                                onTabChange(SettingsTab.Main)
+                            }
+                            true
+                        } else false
+                    },
+                color = CinematicSurface.copy(alpha = 0.95f),
+                shape = RectangleShape
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (activeTab != SettingsTab.Main) {
+                            IconButton(onClick = { onTabChange(SettingsTab.Main) }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = CinematicText)
+                            }
+                        }
+                        Text(
+                            text = when (activeTab) {
+                                SettingsTab.Main -> "Settings"
+                                SettingsTab.Quality -> "Video Quality"
+                                SettingsTab.Speed -> "Playback Speed"
+                            },
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = CinematicText,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    when (activeTab) {
+                        SettingsTab.Main -> {
+                            SettingsItem(
+                                label = "Quality",
+                                value = qualities.find { it.url == currentUrl }?.label ?: "Auto",
+                                icon = Icons.Default.HighQuality,
+                                onClick = { onTabChange(SettingsTab.Quality) }
+                            )
+                            SettingsItem(
+                                label = "Speed",
+                                value = "${currentSpeed}x",
+                                icon = Icons.Default.Speed,
+                                onClick = { onTabChange(SettingsTab.Speed) }
+                            )
+                        }
+                        SettingsTab.Quality -> {
+                            LazyColumn {
+                                items(qualities) { quality ->
+                                    SettingsOption(
+                                        label = quality.label,
+                                        isSelected = quality.url == currentUrl,
+                                        onClick = {
+                                            onQualitySelect(quality.url)
+                                            onClose()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        SettingsTab.Speed -> {
+                            val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                            LazyColumn {
+                                items(speeds) { speed ->
+                                    SettingsOption(
+                                        label = "${speed}x",
+                                        isSelected = speed == currentSpeed,
+                                        onClick = {
+                                            onSpeedSelect(speed)
+                                            onClose()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingsItem(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    TvSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = 0.1f)
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = CinematicText, modifier = Modifier.size(24.dp))
+            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                Text(label, color = CinematicText, style = MaterialTheme.typography.bodyLarge)
+                Text(value, color = CinematicAccent, style = MaterialTheme.typography.bodyMedium)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CinematicText.copy(alpha = 0.5f))
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SettingsOption(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    TvSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            focusedContainerColor = Color.White.copy(alpha = 0.1f)
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                label, 
+                color = CinematicText, 
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            )
+            if (isSelected) {
+                Icon(Icons.Default.Check, contentDescription = "Selected", tint = CinematicAccent)
             }
         }
     }
