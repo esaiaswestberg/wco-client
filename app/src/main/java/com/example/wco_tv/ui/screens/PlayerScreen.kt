@@ -11,7 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,12 +46,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Surface as TvSurface
-import androidx.tv.material3.Text
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.compose.material3.Surface
+import androidx.tv.material3.*
 import com.example.wco_tv.CinematicAccent
 import com.example.wco_tv.CinematicSurface
 import com.example.wco_tv.CinematicText
@@ -133,7 +128,7 @@ fun PlayerScreen(
         
         Log.d("WCO_TV_PLAYER", "Playing with headers: $allHeaders")
 
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
+        val dataSourceFactory = DefaultHttpDataSource.Factory ()
             .setUserAgent(WORKING_USER_AGENT)
             .setDefaultRequestProperties(allHeaders)
             
@@ -217,7 +212,7 @@ fun PlayerScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (errorMessage != null) {
-            Text(
+            androidx.tv.material3.Text(
                 text = errorMessage!!,
                 color = Color.Red,
                 modifier = Modifier.align(Alignment.Center)
@@ -312,7 +307,7 @@ fun PlayerControls(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 1. Current time / Duration
-            Text(
+            androidx.tv.material3.Text(
                 text = formattedTime,
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = FontWeight.Medium,
@@ -416,15 +411,26 @@ fun SettingsMenu(
     currentSpeed: Float,
     onSpeedSelect: (Float) -> Unit
 ) {
-    val focusRequester = remember { FocusRequester() }
+    val firstItemFocusRequester = remember { FocusRequester() }
 
-    LaunchedEffect(isOpen) {
+    LaunchedEffect(isOpen, activeTab) {
         if (isOpen) {
-            focusRequester.requestFocus()
+            delay(250) // Ensure panel is visible and composed
+            firstItemFocusRequester.requestFocus()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+        // Scrim background to capture focus
+        if (isOpen) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { onClose() }
+            )
+        }
+
         AnimatedVisibility(
             visible = isOpen,
             enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
@@ -432,12 +438,11 @@ fun SettingsMenu(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(350.dp)
-                .clickable(enabled = false) {} // Prevent click-through
         ) {
-            Surface(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .focusRequester(focusRequester)
+                    .background(CinematicSurface)
                     .onKeyEvent {
                         if (it.key == Key.Back && it.type == KeyEventType.KeyDown) {
                             if (activeTab == SettingsTab.Main) {
@@ -447,18 +452,33 @@ fun SettingsMenu(
                             }
                             true
                         } else false
-                    },
-                color = CinematicSurface.copy(alpha = 0.95f),
-                shape = RectangleShape
+                    }
             ) {
                 Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (activeTab != SettingsTab.Main) {
-                            IconButton(onClick = { onTabChange(SettingsTab.Main) }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = CinematicText)
+                            androidx.tv.material3.Surface(
+                                onClick = { onTabChange(SettingsTab.Main) },
+                                modifier = Modifier.focusRequester(firstItemFocusRequester),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+                                colors = ClickableSurfaceDefaults.colors(
+                                    containerColor = Color.Transparent,
+                                    focusedContainerColor = Color.White.copy(alpha = 0.1f)
+                                ),
+                                shape = ClickableSurfaceDefaults.shape(CircleShape)
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack, 
+                                    contentDescription = "Back", 
+                                    tint = CinematicText, 
+                                    modifier = Modifier.padding(8.dp)
+                                )
                             }
                         }
-                        Text(
+                        androidx.tv.material3.Text(
                             text = when (activeTab) {
                                 SettingsTab.Main -> "Settings"
                                 SettingsTab.Quality -> "Video Quality"
@@ -470,48 +490,56 @@ fun SettingsMenu(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    when (activeTab) {
-                        SettingsTab.Main -> {
-                            SettingsItem(
-                                label = "Quality",
-                                value = qualities.find { it.url == currentUrl }?.label ?: "Auto",
-                                icon = Icons.Default.HighQuality,
-                                onClick = { onTabChange(SettingsTab.Quality) }
-                            )
-                            SettingsItem(
-                                label = "Speed",
-                                value = "${currentSpeed}x",
-                                icon = Icons.Default.Speed,
-                                onClick = { onTabChange(SettingsTab.Speed) }
-                            )
-                        }
-                        SettingsTab.Quality -> {
-                            LazyColumn {
-                                items(qualities) { quality ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        when (activeTab) {
+                            SettingsTab.Main -> {
+                                item {
+                                    SettingsItem(
+                                        label = "Quality",
+                                        value = qualities.find { it.url == currentUrl }?.label ?: "Auto",
+                                        icon = Icons.Default.HighQuality,
+                                        onClick = { onTabChange(SettingsTab.Quality) },
+                                        modifier = Modifier.focusRequester(firstItemFocusRequester)
+                                    )
+                                }
+                                item {
+                                    SettingsItem(
+                                        label = "Speed",
+                                        value = "${currentSpeed}x",
+                                        icon = Icons.Default.Speed,
+                                        onClick = { onTabChange(SettingsTab.Speed) }
+                                    )
+                                }
+                            }
+                            SettingsTab.Quality -> {
+                                itemsIndexed(qualities) { index, quality ->
                                     SettingsOption(
                                         label = quality.label,
                                         isSelected = quality.url == currentUrl,
                                         onClick = {
                                             onQualitySelect(quality.url)
                                             onClose()
-                                        }
+                                        },
+                                        modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
                                     )
                                 }
                             }
-                        }
-                        SettingsTab.Speed -> {
-                            val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-                            LazyColumn {
-                                items(speeds) { speed ->
+                            SettingsTab.Speed -> {
+                                val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                                itemsIndexed(speeds) { index, speed ->
                                     SettingsOption(
                                         label = "${speed}x",
                                         isSelected = speed == currentSpeed,
                                         onClick = {
                                             onSpeedSelect(speed)
                                             onClose()
-                                        }
+                                        },
+                                        modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
                                     )
                                 }
                             }
@@ -529,27 +557,55 @@ fun SettingsItem(
     label: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    TvSurface(
+    var isFocused by remember { mutableStateOf(false) }
+
+    androidx.tv.material3.Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.White.copy(alpha = 0.1f)
         ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+        glow = ClickableSurfaceDefaults.glow(
+            focusedGlow = Glow(
+                elevation = 8.dp,
+                elevationColor = CinematicAccent
+            )
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
+                shape = RoundedCornerShape(8.dp)
+            )
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = CinematicText, modifier = Modifier.size(24.dp))
+            Icon(
+                icon, 
+                contentDescription = null, 
+                tint = if (isFocused) Color.White else CinematicText, 
+                modifier = Modifier.size(24.dp)
+            )
             Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-                Text(label, color = CinematicText, style = MaterialTheme.typography.bodyLarge)
-                Text(value, color = CinematicAccent, style = MaterialTheme.typography.bodyMedium)
+                androidx.tv.material3.Text(label, color = CinematicText, style = MaterialTheme.typography.bodyLarge)
+                androidx.tv.material3.Text(value, color = CinematicAccent, style = MaterialTheme.typography.bodyMedium)
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CinematicText.copy(alpha = 0.5f))
+            Icon(
+                Icons.Default.ChevronRight, 
+                contentDescription = null, 
+                tint = if (isFocused) Color.White else CinematicText.copy(alpha = 0.5f)
+            )
         }
     }
 }
@@ -559,30 +615,53 @@ fun SettingsItem(
 fun SettingsOption(
     label: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    TvSurface(
+    var isFocused by remember { mutableStateOf(false) }
+    
+    androidx.tv.material3.Surface(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.White.copy(alpha = 0.1f)
         ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
+        glow = ClickableSurfaceDefaults.glow(
+            focusedGlow = Glow(
+                elevation = 8.dp,
+                elevationColor = CinematicAccent
+            )
+        ),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
+                shape = RoundedCornerShape(8.dp)
+            )
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
+            androidx.tv.material3.Text(
                 label, 
-                color = CinematicText, 
+                color = if (isFocused) Color.White else CinematicText, 
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
             )
             if (isSelected) {
-                Icon(Icons.Default.Check, contentDescription = "Selected", tint = CinematicAccent)
+                Icon(
+                    Icons.Default.Check, 
+                    contentDescription = "Selected", 
+                    tint = CinematicAccent
+                )
             }
         }
     }
