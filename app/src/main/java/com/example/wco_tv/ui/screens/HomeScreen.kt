@@ -45,6 +45,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 
 @Composable
 fun HomeScreen(
@@ -185,40 +187,47 @@ fun HomeScreen(
                             )
                         }
 
-                        // Search Input (Full width)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(CinematicSurface, RoundedCornerShape(50))
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        // Search Input and Settings Button Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            androidx.compose.foundation.text.BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                textStyle = androidx.compose.ui.text.TextStyle(
-                                    color = CinematicText,
-                                    fontSize = 16.sp
-                                ),
-                                singleLine = true,
-                                decorationBox = { innerTextField ->
-                                    if (searchQuery.isEmpty()) {
-                                        Text("Search cartoons...", color = CinematicTextSecondary.copy(alpha = 0.5f))
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(CinematicSurface, RoundedCornerShape(50))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        color = CinematicText,
+                                        fontSize = 16.sp
+                                    ),
+                                    singleLine = true,
+                                    decorationBox = { innerTextField ->
+                                        if (searchQuery.isEmpty()) {
+                                            Text("Search cartoons...", color = CinematicTextSecondary.copy(alpha = 0.5f))
+                                        }
+                                        innerTextField()
                                     }
-                                    innerTextField()
-                                }
-                            )
-                        }
+                                )
+                            }
 
-                        Button(
-                            onClick = onSettingsClick,
-                            shape = ButtonDefaults.shape(RoundedCornerShape(50)),
-                            colors = ButtonDefaults.colors(
-                                containerColor = CinematicSurface,
-                                focusedContainerColor = CinematicAccent
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Settings", color = CinematicText)
+                            androidx.compose.material3.IconButton(
+                                onClick = onSettingsClick,
+                                modifier = Modifier
+                                    .background(CinematicSurface, RoundedCornerShape(50))
+                                    .size(42.dp)
+                            ) {
+                                androidx.compose.material3.Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = CinematicText
+                                )
+                            }
                         }
                     }
                 } else {
