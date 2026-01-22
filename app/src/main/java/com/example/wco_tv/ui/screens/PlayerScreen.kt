@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
@@ -51,6 +52,7 @@ import androidx.tv.material3.*
 import com.example.wco_tv.CinematicAccent
 import com.example.wco_tv.CinematicSurface
 import com.example.wco_tv.CinematicText
+import com.example.wco_tv.CinematicTextSecondary
 import com.example.wco_tv.WORKING_USER_AGENT
 import com.example.wco_tv.data.local.CacheManager
 import com.example.wco_tv.data.model.VideoQuality
@@ -73,9 +75,9 @@ fun PlayerScreen(
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    var currentUrl by remember { mutableStateOf(videoUrl) }
+    var currentUrl by remember(videoUrl) { mutableStateOf(videoUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isEnded by remember { mutableStateOf(false) }
+    var isEnded by remember(videoUrl) { mutableStateOf(false) }
 
     // Settings State
     var isSettingsOpen by remember { mutableStateOf(false) }
@@ -141,15 +143,13 @@ fun PlayerScreen(
         )
     }
 
-    // Load media when URL changes
-    LaunchedEffect(currentUrl) {
-        val currentPos = exoPlayer.currentPosition
-        
+    // Load media when URL or Episode changes
+    LaunchedEffect(currentUrl, episodeUrl) {
         // Find headers for this quality
         val qualityHeaders = qualities.find { it.url == currentUrl }?.headers ?: emptyMap()
         val allHeaders = baseHeaders + qualityHeaders
         
-        Log.d("WCO_TV_PLAYER", "Playing with headers: $allHeaders")
+        Log.d("WCO_TV_PLAYER", "Playing episode $episodeUrl with headers: $allHeaders")
 
         val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(WORKING_USER_AGENT)
@@ -160,21 +160,20 @@ fun PlayerScreen(
 
         exoPlayer.setMediaSource(mediaSource)
         
-        if (currentPos > 0) {
-             exoPlayer.seekTo(currentPos)
+        // Restore progress for this specific episode
+        val savedInfo = cacheManager.getPlaybackProgress(episodeUrl)
+        if (savedInfo != null && savedInfo.position > 0) {
+            Log.d("WCO_TV_PLAYER", "Restoring playback position for $episodeUrl: ${savedInfo.position} ms")
+            exoPlayer.seekTo(savedInfo.position)
         } else {
-            // Restore progress only on initial load (when pos is 0)
-            val savedInfo = cacheManager.getPlaybackProgress(episodeUrl)
-            if (savedInfo != null && savedInfo.position > 0) {
-                Log.d("WCO_TV_PLAYER", "Restoring playback position: ${savedInfo.position} ms")
-                exoPlayer.seekTo(savedInfo.position)
-            }
+            Log.d("WCO_TV_PLAYER", "Starting $episodeUrl from the beginning")
+            exoPlayer.seekTo(0)
         }
         
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
         isEnded = false
-        // Re-apply speed on quality change
+        // Re-apply speed
         exoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
@@ -192,9 +191,6 @@ fun PlayerScreen(
                     isEnded = true
                     // Clear progress on finish so it restarts next time
                     cacheManager.savePlaybackProgress(episodeUrl, 0, exoPlayer.duration)
-                    if (nextEpisodeTitle != null) {
-                        onPlayNext()
-                    }
                 }
             }
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -284,7 +280,7 @@ fun PlayerScreen(
 
             // Custom Player Controls Overlay
             AnimatedVisibility(
-                visible = areControlsVisible,
+                visible = areControlsVisible && !isEnded,
                 enter = fadeIn(animationSpec = tween(400)),
                 exit = fadeOut(animationSpec = tween(400)),
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -310,11 +306,99 @@ fun PlayerScreen(
                         activeSettingsTab = SettingsTab.Main
                     },
                     onHide = { areControlsVisible = false },
-                    onBack = onBack,
                     isSettingsOpen = isSettingsOpen,
+                    hasNextEpisode = nextEpisodeTitle != null,
+                    onPlayNext = onPlayNext,
+                    videoUrl = currentUrl,
                     modifier = Modifier
                         .focusProperties { canFocus = areControlsVisible && !isSettingsOpen }
                 )
+            }
+
+            // End of Episode Overlay
+            if (isEnded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.85f))
+                        .zIndex(10f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        androidx.tv.material3.Text(
+                            text = "Episode Finished",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = CinematicText,
+                            modifier = Modifier.padding(bottom = 32.dp)
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(24.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Replay Button
+                            Button(
+                                onClick = {
+                                    isEnded = false
+                                    exoPlayer.seekTo(0)
+                                    exoPlayer.play()
+                                },
+                                colors = ButtonDefaults.colors(
+                                    containerColor = CinematicSurface,
+                                    focusedContainerColor = CinematicAccent
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.Replay,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                androidx.tv.material3.Text("Replay")
+                            }
+
+                            // Next Episode Button
+                            if (nextEpisodeTitle != null) {
+                                Button(
+                                    onClick = onPlayNext,
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = CinematicSurface,
+                                        focusedContainerColor = CinematicAccent
+                                    )
+                                ) {
+                                    Icon(
+                                        Icons.Default.SkipNext,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    androidx.tv.material3.Text("Next: $nextEpisodeTitle")
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+                        
+                        // Back Button
+                        Button(
+                            onClick = onBack,
+                            colors = ButtonDefaults.colors(
+                                containerColor = Color.Transparent,
+                                focusedContainerColor = Color.White.copy(alpha = 0.1f)
+                            ),
+                            border = ButtonDefaults.border(
+                                border = Border(
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, CinematicTextSecondary)
+                                )
+                            )
+                        ) {
+                            androidx.tv.material3.Text("Back to Episodes")
+                        }
+                    }
+                }
             }
 
             // Settings Menu Side Panel
@@ -347,16 +431,19 @@ fun PlayerControls(
     onSeek: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     onHide: () -> Unit,
-    onBack: () -> Unit,
     isSettingsOpen: Boolean,
+    hasNextEpisode: Boolean = false,
+    onPlayNext: () -> Unit = {},
+    videoUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
     var isSeekBarFocused by remember { mutableStateOf(false) }
     val seekBarFocusRequester = remember { FocusRequester() }
+    val playPauseFocusRequester = remember { FocusRequester() }
 
-    // Direct focus to seek bar when controls become visible OR when settings are closed
-    LaunchedEffect(isSettingsOpen) {
+    // Direct focus to seek bar when controls become visible OR when settings are closed OR video changes
+    LaunchedEffect(isSettingsOpen, videoUrl) {
         if (!isSettingsOpen) {
             delay(150) // Delay to ensure it's focusable after settings close/animation
             seekBarFocusRequester.requestFocus()
@@ -403,6 +490,9 @@ fun PlayerControls(
                     .height(24.dp)
                     .focusRequester(seekBarFocusRequester)
                     .onFocusChanged { isSeekBarFocused = it.isFocused }
+                    .focusProperties {
+                        down = playPauseFocusRequester
+                    }
                     .focusable()
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyDown) {
@@ -458,13 +548,28 @@ fun PlayerControls(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onTogglePlayPause) {
+                IconButton(
+                    onClick = onTogglePlayPause,
+                    modifier = Modifier.focusRequester(playPauseFocusRequester)
+                ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = Color.White,
                         modifier = Modifier.size(48.dp)
                     )
+                }
+
+                if (hasNextEpisode) {
+                    Spacer(modifier = Modifier.width(16.dp))
+                    IconButton(onClick = onPlayNext) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "Next Episode",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
