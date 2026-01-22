@@ -2,14 +2,17 @@ package com.example.wco_tv.ui.screens
 
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -21,6 +24,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -76,6 +82,11 @@ fun PlayerScreen(
     onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isTouchScreen = remember { context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN) }
+    // Use mobile controls if screen is small OR device has a touchscreen (e.g. phone in landscape)
+    val isCompact = configuration.screenWidthDp < 600 || isTouchScreen
+
     var currentUrl by remember(videoUrl) { mutableStateOf(videoUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isEnded by remember(videoUrl) { mutableStateOf(false) }
@@ -102,7 +113,7 @@ fun PlayerScreen(
     val nextEpisodeFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(showNextEpisodeButton) {
-        if (showNextEpisodeButton) {
+        if (showNextEpisodeButton && !isCompact) {
             delay(500)
             try {
                 nextEpisodeFocusRequester.requestFocus()
@@ -121,14 +132,14 @@ fun PlayerScreen(
     // Auto-hide timer
     LaunchedEffect(areControlsVisible, lastInteractionTime, isSettingsOpen, isPlaying) {
         if (areControlsVisible && !isSettingsOpen && isPlaying) {
-            delay(10000)
+            delay(5000)
             areControlsVisible = false
         }
     }
 
     // Focus management when controls hide
     LaunchedEffect(areControlsVisible, isSettingsOpen) {
-        if (!areControlsVisible && !isSettingsOpen) {
+        if (!areControlsVisible && !isSettingsOpen && !isCompact) {
             // Ensure main box has focus when controls are hidden to catch the first key press
             mainBoxFocusRequester.requestFocus()
         }
@@ -251,6 +262,13 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                areControlsVisible = !areControlsVisible
+                lastInteractionTime = System.currentTimeMillis()
+            }
             .focusRequester(mainBoxFocusRequester)
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown && !areControlsVisible && !isSettingsOpen) {
@@ -296,6 +314,39 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
+            // Top Bar (Back Button)
+            AnimatedVisibility(
+                visible = areControlsVisible && !isEnded,
+                enter = fadeIn() + slideInVertically { -it },
+                exit = fadeOut() + slideOutVertically { -it },
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.7f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+
             // Custom Player Controls Overlay
             AnimatedVisibility(
                 visible = areControlsVisible && !isEnded,
@@ -304,6 +355,7 @@ fun PlayerScreen(
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 PlayerControls(
+                    isCompact = isCompact,
                     isPlaying = isPlaying,
                     currentPosition = playbackPosition,
                     duration = duration,
@@ -460,6 +512,7 @@ fun PlayerScreen(
 
             // Settings Menu Side Panel
             SettingsMenu(
+                isCompact = isCompact,
                 isOpen = isSettingsOpen,
                 activeTab = activeSettingsTab,
                 onClose = { isSettingsOpen = false },
@@ -480,6 +533,7 @@ fun PlayerScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun PlayerControls(
+    isCompact: Boolean,
     isPlaying: Boolean,
     currentPosition: Long,
     duration: Long,
@@ -503,7 +557,7 @@ fun PlayerControls(
 
     // Direct focus to seek bar when controls become visible OR when settings are closed OR video changes
     LaunchedEffect(isSettingsOpen, videoUrl) {
-        if (!isSettingsOpen) {
+        if (!isSettingsOpen && !isCompact) {
             delay(150) // Delay to ensure it's focusable after settings close/animation
             seekBarFocusRequester.requestFocus()
         }
@@ -520,7 +574,7 @@ fun PlayerControls(
                     )
                 )
             )
-            .padding(horizontal = 48.dp, vertical = 32.dp)
+            .padding(horizontal = if (isCompact) 16.dp else 48.dp, vertical = 32.dp)
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Back) {
                     onHide()
@@ -542,67 +596,93 @@ fun PlayerControls(
                 color = CinematicText
             )
 
-            // 2. Seek bar (Interacting with D-pad)
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(24.dp)
-                    .focusRequester(seekBarFocusRequester)
-                    .onFocusChanged { isSeekBarFocused = it.isFocused }
-                    .focusProperties {
-                        down = playPauseFocusRequester
-                    }
-                    .focusable()
-                    .onKeyEvent { keyEvent ->
-                        if (keyEvent.type == KeyEventType.KeyDown) {
-                            when (keyEvent.key) {
-                                Key.DirectionLeft -> {
-                                    val newPos = (currentPosition - 10000).coerceAtLeast(0L)
-                                    onSeek(newPos)
-                                    true
-                                }
-                                Key.DirectionRight -> {
-                                    val newPos = (currentPosition + 10000).coerceAtMost(duration)
-                                    onSeek(newPos)
-                                    true
-                                }
-                                Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
-                                    onTogglePlayPause()
-                                    true
-                                }
-                                Key.DirectionUp -> {
-                                    if (!onFocusUp()) {
-                                        onHide()
-                                    }
-                                    true
-                                }
-                                else -> false
-                            }
-                        } else false
+            // 2. Seek bar (Slider for Mobile, D-pad optimized for TV)
+            if (isCompact) {
+                // Mobile Slider
+                var sliderPosition by remember(currentPosition) { mutableFloatStateOf(currentPosition.toFloat()) }
+                var isDragging by remember { mutableStateOf(false) }
+
+                Slider(
+                    value = if (isDragging) sliderPosition else currentPosition.toFloat(),
+                    onValueChange = {
+                        isDragging = true
+                        sliderPosition = it
                     },
-                contentAlignment = Alignment.CenterStart
-            ) {
-                // Track
-                LinearProgressIndicator(
-                    progress = { progress },
+                    onValueChangeFinished = {
+                        onSeek(sliderPosition.toLong())
+                        isDragging = false
+                    },
+                    valueRange = 0f..duration.toFloat(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = CinematicAccent,
+                        activeTrackColor = CinematicAccent,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                // TV D-pad Seek Bar
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (isSeekBarFocused) 10.dp else 8.dp)
-                        .clip(CircleShape),
-                    color = CinematicAccent,
-                    trackColor = Color.White.copy(alpha = 0.2f),
-                    strokeCap = StrokeCap.Round
-                )
-                
-                // Thumb
-                if (isSeekBarFocused) {
-                    val thumbOffset = maxWidth * progress
-                    Box(
+                        .height(24.dp)
+                        .focusRequester(seekBarFocusRequester)
+                        .onFocusChanged { isSeekBarFocused = it.isFocused }
+                        .focusProperties {
+                            down = playPauseFocusRequester
+                        }
+                        .focusable()
+                        .onKeyEvent { keyEvent ->
+                            if (keyEvent.type == KeyEventType.KeyDown) {
+                                when (keyEvent.key) {
+                                    Key.DirectionLeft -> {
+                                        val newPos = (currentPosition - 10000).coerceAtLeast(0L)
+                                        onSeek(newPos)
+                                        true
+                                    }
+                                    Key.DirectionRight -> {
+                                        val newPos = (currentPosition + 10000).coerceAtMost(duration)
+                                        onSeek(newPos)
+                                        true
+                                    }
+                                    Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
+                                        onTogglePlayPause()
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        if (!onFocusUp()) {
+                                            onHide()
+                                        }
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            } else false
+                        },
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    // Track
+                    LinearProgressIndicator(
+                        progress = { progress },
                         modifier = Modifier
-                            .offset(x = thumbOffset - 8.dp)
-                            .size(16.dp)
-                            .background(Color.White, CircleShape)
+                            .fillMaxWidth()
+                            .height(if (isSeekBarFocused) 10.dp else 8.dp)
+                            .clip(CircleShape),
+                        color = CinematicAccent,
+                        trackColor = Color.White.copy(alpha = 0.2f),
+                        strokeCap = StrokeCap.Round
                     )
+                    
+                    // Thumb
+                    if (isSeekBarFocused) {
+                        val thumbOffset = maxWidth * progress
+                        Box(
+                            modifier = Modifier
+                                .offset(x = thumbOffset - 8.dp)
+                                .size(16.dp)
+                                .background(Color.White, CircleShape)
+                        )
+                    }
                 }
             }
 
@@ -654,6 +734,7 @@ fun PlayerControls(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsMenu(
+    isCompact: Boolean,
     isOpen: Boolean,
     activeTab: SettingsTab,
     onClose: () -> Unit,
@@ -667,7 +748,7 @@ fun SettingsMenu(
     val firstItemFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(isOpen, activeTab) {
-        if (isOpen) {
+        if (isOpen && !isCompact) {
             delay(250) // Ensure panel is visible and composed
             firstItemFocusRequester.requestFocus()
         }
@@ -696,6 +777,10 @@ fun SettingsMenu(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(CinematicSurface)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* absorb clicks */ }
                     .onKeyEvent {
                         if (it.key == Key.Back && it.type == KeyEventType.KeyDown) {
                             if (activeTab == SettingsTab.Main) {
@@ -713,22 +798,32 @@ fun SettingsMenu(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (activeTab != SettingsTab.Main) {
-                            androidx.tv.material3.Surface(
-                                onClick = { onTabChange(SettingsTab.Main) },
-                                modifier = Modifier.focusRequester(firstItemFocusRequester),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
-                                colors = ClickableSurfaceDefaults.colors(
-                                    containerColor = Color.Transparent,
-                                    focusedContainerColor = Color.White.copy(alpha = 0.15f)
-                                ),
-                                shape = ClickableSurfaceDefaults.shape(CircleShape)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack, 
-                                    contentDescription = "Back", 
-                                    tint = CinematicText, 
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                            if (isCompact) {
+                                IconButton(onClick = { onTabChange(SettingsTab.Main) }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack, 
+                                        contentDescription = "Back", 
+                                        tint = CinematicText
+                                    )
+                                }
+                            } else {
+                                androidx.tv.material3.Surface(
+                                    onClick = { onTabChange(SettingsTab.Main) },
+                                    modifier = Modifier.focusRequester(firstItemFocusRequester),
+                                    scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+                                    colors = ClickableSurfaceDefaults.colors(
+                                        containerColor = Color.Transparent,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.15f)
+                                    ),
+                                    shape = ClickableSurfaceDefaults.shape(CircleShape)
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack, 
+                                        contentDescription = "Back", 
+                                        tint = CinematicText, 
+                                        modifier = Modifier.padding(8.dp)
+                                    )
+                                }
                             }
                         }
                         androidx.tv.material3.Text(
@@ -753,15 +848,17 @@ fun SettingsMenu(
                             SettingsTab.Main -> {
                                 item {
                                     SettingsItem(
+                                        isCompact = isCompact,
                                         label = "Quality",
                                         value = qualities.find { it.url == currentUrl }?.label ?: "Auto",
                                         icon = Icons.Default.HighQuality,
                                         onClick = { onTabChange(SettingsTab.Quality) },
-                                        modifier = Modifier.focusRequester(firstItemFocusRequester)
+                                        modifier = if (!isCompact) Modifier.focusRequester(firstItemFocusRequester) else Modifier
                                     )
                                 }
                                 item {
                                     SettingsItem(
+                                        isCompact = isCompact,
                                         label = "Speed",
                                         value = "${currentSpeed}x",
                                         icon = Icons.Default.Speed,
@@ -772,13 +869,14 @@ fun SettingsMenu(
                             SettingsTab.Quality -> {
                                 itemsIndexed(qualities) { index, quality ->
                                     SettingsOption(
+                                        isCompact = isCompact,
                                         label = quality.label,
                                         isSelected = quality.url == currentUrl,
                                         onClick = {
                                             onQualitySelect(quality.url)
                                             onClose()
                                         },
-                                        modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
+                                        modifier = if (!isCompact && index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
                                     )
                                 }
                             }
@@ -786,13 +884,14 @@ fun SettingsMenu(
                                 val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
                                 itemsIndexed(speeds) { index, speed ->
                                     SettingsOption(
+                                        isCompact = isCompact,
                                         label = "${speed}x",
                                         isSelected = speed == currentSpeed,
                                         onClick = {
                                             onSpeedSelect(speed)
                                             onClose()
                                         },
-                                        modifier = if (index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
+                                        modifier = if (!isCompact && index == 0) Modifier.focusRequester(firstItemFocusRequester) else Modifier
                                     )
                                 }
                             }
@@ -807,40 +906,27 @@ fun SettingsMenu(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsItem(
+    isCompact: Boolean,
     label: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    androidx.tv.material3.Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.15f)
-        ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
+    if (isCompact) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick)
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon, 
                 contentDescription = null, 
-                tint = if (isFocused) Color.White else CinematicText, 
+                tint = CinematicText, 
                 modifier = Modifier.size(24.dp)
             )
             Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
@@ -850,8 +936,50 @@ fun SettingsItem(
             Icon(
                 Icons.Default.ChevronRight, 
                 contentDescription = null, 
-                tint = if (isFocused) Color.White else CinematicText.copy(alpha = 0.5f)
+                tint = CinematicText.copy(alpha = 0.5f)
             )
+        }
+    } else {
+        var isFocused by remember { mutableStateOf(false) }
+
+        androidx.tv.material3.Surface(
+            onClick = onClick,
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .onFocusChanged { isFocused = it.isFocused },
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White.copy(alpha = 0.15f)
+            ),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(
+                    border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
+                    shape = RoundedCornerShape(8.dp)
+                )
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    icon, 
+                    contentDescription = null, 
+                    tint = if (isFocused) Color.White else CinematicText, 
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                    androidx.tv.material3.Text(label, color = CinematicText, style = MaterialTheme.typography.bodyLarge)
+                    androidx.tv.material3.Text(value, color = CinematicAccent, style = MaterialTheme.typography.bodyMedium)
+                }
+                Icon(
+                    Icons.Default.ChevronRight, 
+                    contentDescription = null, 
+                    tint = if (isFocused) Color.White else CinematicText.copy(alpha = 0.5f)
+                )
+            }
         }
     }
 }
@@ -859,39 +987,26 @@ fun SettingsItem(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SettingsOption(
+    isCompact: Boolean,
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-    
-    androidx.tv.material3.Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.15f)
-        ),
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
-                shape = RoundedCornerShape(8.dp)
-            )
-        )
-    ) {
+    if (isCompact) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onClick)
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             androidx.tv.material3.Text(
                 label, 
-                color = if (isFocused) Color.White else CinematicText, 
+                color = CinematicText, 
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
             )
@@ -901,6 +1016,47 @@ fun SettingsOption(
                     contentDescription = "Selected", 
                     tint = CinematicAccent
                 )
+            }
+        }
+    } else {
+        var isFocused by remember { mutableStateOf(false) }
+        
+        androidx.tv.material3.Surface(
+            onClick = onClick,
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .onFocusChanged { isFocused = it.isFocused },
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.White.copy(alpha = 0.15f)
+            ),
+            shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(
+                    border = androidx.compose.foundation.BorderStroke(2.dp, CinematicAccent),
+                    shape = RoundedCornerShape(8.dp)
+                )
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                androidx.tv.material3.Text(
+                    label, 
+                    color = if (isFocused) Color.White else CinematicText, 
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+                if (isSelected) {
+                    Icon(
+                        Icons.Default.Check, 
+                        contentDescription = "Selected", 
+                        tint = CinematicAccent
+                    )
+                }
             }
         }
     }
