@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -68,7 +69,8 @@ fun PlayerScreen(
     episodeUrl: String,
     cacheManager: CacheManager,
     nextEpisodeTitle: String? = null,
-    onPlayNext: () -> Unit = {}
+    onPlayNext: () -> Unit = {},
+    onBack: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var currentUrl by remember { mutableStateOf(videoUrl) }
@@ -80,6 +82,10 @@ fun PlayerScreen(
     var activeSettingsTab by remember { mutableStateOf(SettingsTab.Main) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
 
+    // Controls Visibility State
+    var areControlsVisible by remember { mutableStateOf(true) }
+    var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+
     // Player State for UI
     var isPlaying by remember { mutableStateOf(false) }
     var playbackPosition by remember { mutableLongStateOf(0L) }
@@ -89,6 +95,14 @@ fun PlayerScreen(
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()
+    }
+
+    // Auto-hide timer
+    LaunchedEffect(areControlsVisible, lastInteractionTime, isSettingsOpen) {
+        if (areControlsVisible && !isSettingsOpen) {
+            delay(10000)
+            areControlsVisible = false
+        }
     }
 
     // Helper to format time
@@ -128,7 +142,7 @@ fun PlayerScreen(
         
         Log.d("WCO_TV_PLAYER", "Playing with headers: $allHeaders")
 
-        val dataSourceFactory = DefaultHttpDataSource.Factory ()
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(WORKING_USER_AGENT)
             .setDefaultRequestProperties(allHeaders)
             
@@ -210,7 +224,33 @@ fun PlayerScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && !areControlsVisible && !isSettingsOpen) {
+                    when (keyEvent.key) {
+                        Key.DirectionDown, Key.Enter, Key.DirectionCenter -> {
+                            areControlsVisible = true
+                            lastInteractionTime = System.currentTimeMillis()
+                            true
+                        }
+                        Key.Back -> {
+                            onBack()
+                            true
+                        }
+                        else -> false
+                    }
+                } else {
+                    if (keyEvent.type == KeyEventType.KeyDown) {
+                        lastInteractionTime = System.currentTimeMillis()
+                    }
+                    false
+                }
+            }
+            .focusable()
+    ) {
         if (errorMessage != null) {
             androidx.tv.material3.Text(
                 text = errorMessage!!,
@@ -230,30 +270,38 @@ fun PlayerScreen(
             )
 
             // Custom Player Controls Overlay
-            PlayerControls(
-                isPlaying = isPlaying,
-                currentPosition = playbackPosition,
-                duration = duration,
-                formattedTime = "${formatTime(playbackPosition)} / ${formatTime(duration)}",
-                onTogglePlayPause = {
-                    if (exoPlayer.isPlaying) {
-                        exoPlayer.pause()
-                    } else {
-                        exoPlayer.play()
-                    }
-                },
-                onSeek = { newPosition ->
-                    exoPlayer.seekTo(newPosition)
-                    playbackPosition = newPosition
-                },
-                onSettingsClick = {
-                    isSettingsOpen = true
-                    activeSettingsTab = SettingsTab.Main
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .focusProperties { canFocus = !isSettingsOpen }
-            )
+            AnimatedVisibility(
+                visible = areControlsVisible,
+                enter = fadeIn(animationSpec = tween(400)),
+                exit = fadeOut(animationSpec = tween(400)),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                PlayerControls(
+                    isPlaying = isPlaying,
+                    currentPosition = playbackPosition,
+                    duration = duration,
+                    formattedTime = "${formatTime(playbackPosition)} / ${formatTime(duration)}",
+                    onTogglePlayPause = {
+                        if (exoPlayer.isPlaying) {
+                            exoPlayer.pause()
+                        } else {
+                            exoPlayer.play()
+                        }
+                    },
+                    onSeek = { newPosition ->
+                        exoPlayer.seekTo(newPosition)
+                        playbackPosition = newPosition
+                    },
+                    onSettingsClick = {
+                        isSettingsOpen = true
+                        activeSettingsTab = SettingsTab.Main
+                    },
+                    onHide = { areControlsVisible = false },
+                    onBack = onBack,
+                    modifier = Modifier
+                        .focusProperties { canFocus = areControlsVisible && !isSettingsOpen }
+                )
+            }
 
             // Settings Menu Side Panel
             SettingsMenu(
@@ -284,10 +332,19 @@ fun PlayerControls(
     onTogglePlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onSettingsClick: () -> Unit,
+    onHide: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
     var isSeekBarFocused by remember { mutableStateOf(false) }
+    val seekBarFocusRequester = remember { FocusRequester() }
+
+    // Direct focus to seek bar when controls become visible
+    LaunchedEffect(Unit) {
+        delay(100) // Small delay to ensure it's ready to receive focus
+        seekBarFocusRequester.requestFocus()
+    }
 
     Box(
         modifier = modifier
@@ -301,6 +358,12 @@ fun PlayerControls(
                 )
             )
             .padding(horizontal = 48.dp, vertical = 32.dp)
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && keyEvent.key == Key.Back) {
+                    onHide()
+                    true
+                } else false
+            }
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -321,6 +384,7 @@ fun PlayerControls(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(24.dp)
+                    .focusRequester(seekBarFocusRequester)
                     .onFocusChanged { isSeekBarFocused = it.isFocused }
                     .focusable()
                     .onKeyEvent { keyEvent ->
@@ -338,6 +402,10 @@ fun PlayerControls(
                                 }
                                 Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
                                     onTogglePlayPause()
+                                    true
+                                }
+                                Key.DirectionUp -> {
+                                    onHide()
                                     true
                                 }
                                 else -> false
@@ -463,6 +531,7 @@ fun SettingsMenu(
                             androidx.tv.material3.Surface(
                                 onClick = { onTabChange(SettingsTab.Main) },
                                 modifier = Modifier.focusRequester(firstItemFocusRequester),
+                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = Color.Transparent,
                                     focusedContainerColor = Color.White.copy(alpha = 0.15f)
