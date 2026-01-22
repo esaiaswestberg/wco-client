@@ -88,11 +88,28 @@ fun PlayerScreen(
     var areControlsVisible by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val mainBoxFocusRequester = remember { FocusRequester() }
+    val seekBarFocusRequester = remember { FocusRequester() }
 
     // Player State for UI
     var isPlaying by remember { mutableStateOf(false) }
     var playbackPosition by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
+
+    // Next Episode Logic
+    val timeRemaining = (duration - playbackPosition).coerceAtLeast(0L)
+    val showNextEpisodeButton = nextEpisodeTitle != null && !isEnded && duration > 0 && timeRemaining <= 30000
+    val nextEpisodeFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(showNextEpisodeButton) {
+        if (showNextEpisodeButton) {
+            delay(500)
+            try {
+                nextEpisodeFocusRequester.requestFocus()
+            } catch (e: Exception) {
+                Log.w("WCO_TV_PLAYER", "Failed to focus next episode button", e)
+            }
+        }
+    }
 
     Log.d("WCO_TV_PLAYER", "Initializing Player with URL: $currentUrl")
 
@@ -310,9 +327,48 @@ fun PlayerScreen(
                     hasNextEpisode = nextEpisodeTitle != null,
                     onPlayNext = onPlayNext,
                     videoUrl = currentUrl,
+                    seekBarFocusRequester = seekBarFocusRequester,
+                    onFocusUp = {
+                        if (showNextEpisodeButton) {
+                            nextEpisodeFocusRequester.requestFocus()
+                            true
+                        } else {
+                            false
+                        }
+                    },
                     modifier = Modifier
                         .focusProperties { canFocus = areControlsVisible && !isSettingsOpen }
                 )
+            }
+
+            // Next Episode Countdown
+            AnimatedVisibility(
+                visible = showNextEpisodeButton,
+                enter = fadeIn() + slideInHorizontally { it / 2 },
+                exit = fadeOut() + slideOutHorizontally { it / 2 },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 120.dp, end = 48.dp)
+                    .zIndex(5f)
+            ) {
+                Button(
+                    onClick = onPlayNext,
+                    colors = ButtonDefaults.colors(
+                        containerColor = CinematicSurface.copy(alpha = 0.9f),
+                        focusedContainerColor = CinematicAccent
+                    ),
+                    modifier = Modifier
+                        .focusRequester(nextEpisodeFocusRequester)
+                        .focusProperties { down = seekBarFocusRequester }
+                        .onFocusChanged {
+                            if (it.isFocused) {
+                                lastInteractionTime = System.currentTimeMillis()
+                                areControlsVisible = true
+                            }
+                        }
+                ) {
+                    androidx.tv.material3.Text("Next episode in ${(timeRemaining + 999) / 1000}s")
+                }
             }
 
             // End of Episode Overlay
@@ -435,11 +491,13 @@ fun PlayerControls(
     hasNextEpisode: Boolean = false,
     onPlayNext: () -> Unit = {},
     videoUrl: String? = null,
+    seekBarFocusRequester: FocusRequester,
+    onFocusUp: () -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
     var isSeekBarFocused by remember { mutableStateOf(false) }
-    val seekBarFocusRequester = remember { FocusRequester() }
+    // val seekBarFocusRequester = remember { FocusRequester() } // Hoisted
     val playPauseFocusRequester = remember { FocusRequester() }
 
     // Direct focus to seek bar when controls become visible OR when settings are closed OR video changes
@@ -512,7 +570,9 @@ fun PlayerControls(
                                     true
                                 }
                                 Key.DirectionUp -> {
-                                    onHide()
+                                    if (!onFocusUp()) {
+                                        onHide()
+                                    }
                                     true
                                 }
                                 else -> false
