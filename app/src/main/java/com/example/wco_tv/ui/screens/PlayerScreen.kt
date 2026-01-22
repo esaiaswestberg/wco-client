@@ -3,18 +3,12 @@ package com.example.wco_tv.ui.screens
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -24,18 +18,12 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import com.example.wco_tv.CinematicAccent
-import com.example.wco_tv.CinematicSurface
 import com.example.wco_tv.WORKING_USER_AGENT
 import com.example.wco_tv.data.local.CacheManager
 import com.example.wco_tv.data.model.VideoQuality
 import kotlinx.coroutines.delay
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -46,19 +34,12 @@ fun PlayerScreen(
     episodeUrl: String,
     cacheManager: CacheManager,
     nextEpisodeTitle: String? = null,
-    onPlayNext: () -> Unit = {},
-    onBack: () -> Unit
+    onPlayNext: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var currentUrl by remember { mutableStateOf(videoUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var timeLeft by remember { mutableStateOf<Long?>(null) }
     var isEnded by remember { mutableStateOf(false) }
-    val nextButtonFocusRequester = remember { FocusRequester() }
-    
-    // Quality selection state
-    var showQualitySelector by remember { mutableStateOf(false) }
-    val qualityButtonFocusRequester = remember { FocusRequester() }
 
     Log.d("WCO_TV_PLAYER", "Initializing Player with URL: $currentUrl")
 
@@ -113,7 +94,6 @@ fun PlayerScreen(
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
         isEnded = false
-        timeLeft = null
     }
 
     // Player Listeners
@@ -147,15 +127,13 @@ fun PlayerScreen(
         }
     }
 
-    // Progress Polling for "Next Episode" button and saving state
+    // Progress Polling for saving state
     LaunchedEffect(exoPlayer, isEnded) {
         while (!isEnded) {
             val duration = exoPlayer.duration
             val position = exoPlayer.currentPosition
             
             if (duration > 0) {
-                timeLeft = duration - position
-                
                 // Save progress periodically (every 5s)
                 if (position > 5000 && (duration - position) > 10000) { // Don't save if just started or nearly finished
                      cacheManager.savePlaybackProgress(episodeUrl, position, duration)
@@ -177,82 +155,12 @@ fun PlayerScreen(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
                         player = exoPlayer
-                        useController = true
+                        useController = false
                         keepScreenOn = true
-                        setShowNextButton(false) // Hide default next button
-                        
-                        // Custom controller visibility listener could go here
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
-            
-            // Quality Selector
-            if (qualities.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                ) {
-                    if (showQualitySelector) {
-                        Row(
-                            modifier = Modifier
-                                .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            qualities.forEach { quality ->
-                                Button(
-                                    onClick = {
-                                        currentUrl = quality.url
-                                        showQualitySelector = false
-                                    },
-                                    modifier = Modifier.padding(horizontal = 4.dp),
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = if (currentUrl == quality.url) CinematicAccent else Color.Gray
-                                    )
-                                ) {
-                                    Text(quality.label)
-                                }
-                            }
-                        }
-                    } else {
-                         Button(
-                            onClick = { showQualitySelector = true },
-                            colors = ButtonDefaults.colors(containerColor = Color.Black.copy(alpha = 0.5f)),
-                            modifier = Modifier.focusRequester(qualityButtonFocusRequester)
-                        ) {
-                            Text("Quality")
-                        }
-                    }
-                }
-            }
-            
-            // "Next Episode" Overlay
-            if (nextEpisodeTitle != null && timeLeft != null && timeLeft!! < 30000 && !isEnded) {
-                // Auto-focus the button when it appears
-                LaunchedEffect(Unit) {
-                    nextButtonFocusRequester.requestFocus()
-                }
-
-                Button(
-                    onClick = onPlayNext,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(bottom = 80.dp, end = 40.dp) // Position above timeline
-                        .focusRequester(nextButtonFocusRequester),
-                    colors = ButtonDefaults.colors(
-                        containerColor = CinematicSurface.copy(alpha = 0.9f),
-                        focusedContainerColor = CinematicAccent
-                    ),
-                    shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
-                ) {
-                    Row(modifier = Modifier.padding(12.dp)) {
-                        Text("Next: $nextEpisodeTitle", color = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("(${timeLeft!! / 1000}s)", color = Color.Gray)
-                    }
-                }
-            }
         }
     }
 }

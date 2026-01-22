@@ -335,8 +335,7 @@ fun AppNavigation() {
                                 currentEpisodeIndex++
                                 playEpisode(nextEpisode)
                             }
-                        },
-                        onBack = { navController.popBackStack() }
+                        }
                     )
                 }
             }
