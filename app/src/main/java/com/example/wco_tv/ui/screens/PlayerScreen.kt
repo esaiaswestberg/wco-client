@@ -463,10 +463,9 @@ fun SettingsMenu(
                             androidx.tv.material3.Surface(
                                 onClick = { onTabChange(SettingsTab.Main) },
                                 modifier = Modifier.focusRequester(firstItemFocusRequester),
-                                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
                                 colors = ClickableSurfaceDefaults.colors(
                                     containerColor = Color.Transparent,
-                                    focusedContainerColor = Color.White.copy(alpha = 0.1f)
+                                    focusedContainerColor = Color.White.copy(alpha = 0.15f)
                                 ),
                                 shape = ClickableSurfaceDefaults.shape(CircleShape)
                             ) {
@@ -568,16 +567,9 @@ fun SettingsItem(
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .onFocusChanged { isFocused = it.isFocused },
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.1f)
-        ),
-        glow = ClickableSurfaceDefaults.glow(
-            focusedGlow = Glow(
-                elevation = 8.dp,
-                elevationColor = CinematicAccent
-            )
+            focusedContainerColor = Color.White.copy(alpha = 0.15f)
         ),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         border = ClickableSurfaceDefaults.border(
@@ -626,16 +618,9 @@ fun SettingsOption(
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .onFocusChanged { isFocused = it.isFocused },
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.1f)
-        ),
-        glow = ClickableSurfaceDefaults.glow(
-            focusedGlow = Glow(
-                elevation = 8.dp,
-                elevationColor = CinematicAccent
-            )
+            focusedContainerColor = Color.White.copy(alpha = 0.15f)
         ),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
         border = ClickableSurfaceDefaults.border(
