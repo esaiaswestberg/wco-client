@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,11 +16,16 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import coil.compose.AsyncImage
 import com.example.wco_tv.CinematicAccent
 import com.example.wco_tv.CinematicSurface
@@ -31,8 +38,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.wco_tv.data.remote.TvMazeRepository
-
 import com.example.wco_tv.data.local.CacheManager
+
+// Aliases for Mobile components
+import androidx.compose.material3.Button as MobileButton
+import androidx.compose.material3.ButtonDefaults as MobileButtonDefaults
+import androidx.compose.material3.Text as MobileText
+import androidx.compose.material3.MaterialTheme as MobileMaterialTheme
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -50,6 +62,9 @@ fun DetailsScreen(
     var isLoading by remember { mutableStateOf(true) }
     var artwork by remember { mutableStateOf<CacheManager.Artwork?>(null) }
     val focusRequester = remember { FocusRequester() }
+    
+    val configuration = LocalConfiguration.current
+    val isCompact = configuration.screenWidthDp < 600
     
     // We need a scope for async operations initiated by callbacks
     val scope = rememberCoroutineScope()
@@ -95,9 +110,9 @@ fun DetailsScreen(
                 }
             )
 
-            // Auto-focus first season when list loads
+            // Auto-focus first season when list loads (TV ONLY)
             LaunchedEffect(availableSeasons.isNotEmpty()) {
-                if (availableSeasons.isNotEmpty()) {
+                if (availableSeasons.isNotEmpty() && !isCompact) {
                     delay(100)
                     focusRequester.requestFocus()
                 }
@@ -119,7 +134,7 @@ fun DetailsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            Brush.horizontalGradient(
+                            Brush.verticalGradient(
                                 colors = listOf(
                                     Color.Black.copy(alpha = 0.9f),
                                     Color.Black.copy(alpha = 0.6f),
@@ -129,126 +144,251 @@ fun DetailsScreen(
                         )
                 )
 
-                // Content
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(48.dp)
-                ) {
-                    // Left: Poster
-                    Card(
-                        onClick = {},
-                        shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                if (isCompact) {
+                    // Mobile Layout
+                    Column(
                         modifier = Modifier
-                            .width(300.dp)
-                            .aspectRatio(2f/3f),
-                        colors = CardDefaults.colors(containerColor = Color.Transparent)
+                            .fillMaxSize()
+                            .padding(16.dp)
+                            .verticalScroll(rememberScrollState())
                     ) {
-                        AsyncImage(
-                            model = displayPoster,
-                            contentDescription = "Poster",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
+                        // Back Button
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = CinematicText
+                            )
+                        }
+                        
+                        // Poster
+                        Card(
+                            onClick = {},
+                            shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f/9f)
+                                .padding(bottom = 16.dp),
+                            colors = CardDefaults.colors(containerColor = Color.Transparent)
+                        ) {
+                            AsyncImage(
+                                model = displayPoster,
+                                contentDescription = "Poster",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop // Or Fit/Fill depending on aspect ratio preference
+                            )
+                        }
+
+                        // Title
+                        MobileText(
+                            text = data.title,
+                            style = MobileMaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                            color = CinematicText
                         )
-                    }
-
-                    Spacer(modifier = Modifier.width(48.dp))
-
-                    // Right: Info & Seasons
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Favorite Button
+                        MobileButton(
+                            onClick = onToggleFavorite,
+                            colors = MobileButtonDefaults.buttonColors(
+                                containerColor = if (isFavorite) Color(0xFF332F00) else CinematicSurface
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = data.title,
-                                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
-                                color = CinematicText,
-                                modifier = Modifier.weight(1f)
+                            MobileText(
+                                text = if (isFavorite) "★ Favorited" else "☆ Add to Favorites",
+                                color = if (isFavorite) Color(0xFFFFD700) else CinematicText
                             )
-                            
-                            // Favorite Button
-                            Button(
-                                onClick = onToggleFavorite,
-                                colors = ButtonDefaults.colors(
-                                    containerColor = if (isFavorite) Color(0xFF332F00) else CinematicSurface,
-                                    focusedContainerColor = if (isFavorite) Color(0xFF665C00) else CinematicAccent
-                                ),
-                                shape = ButtonDefaults.shape(RoundedCornerShape(50))
-                            ) {
-                                Text(
-                                    text = if (isFavorite) "★ Favorited" else "☆ Add to Favorites",
-                                    color = if (isFavorite) Color(0xFFFFD700) else CinematicText
-                                )
-                            }
                         }
                         
                         Spacer(modifier = Modifier.height(16.dp))
-                        
+
                         // Genres
-                        Row {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
                             data.genres.take(4).forEach { genre ->
                                 Box(
                                     modifier = Modifier
-                                        .padding(end = 8.dp)
+                                        .padding(end = 8.dp, bottom = 8.dp)
                                         .background(CinematicSurface, RoundedCornerShape(4.dp))
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
-                                    Text(
+                                    MobileText(
                                         text = genre,
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = MobileMaterialTheme.typography.labelMedium,
                                         color = CinematicTextSecondary
                                     )
                                 }
                             }
                         }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        MobileText(
+                            text = data.description,
+                            style = MobileMaterialTheme.typography.bodyMedium,
+                            color = CinematicTextSecondary
+                        )
 
                         Spacer(modifier = Modifier.height(24.dp))
                         
-                        Text(
-                            text = data.description,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = CinematicTextSecondary,
-                            maxLines = 4,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.height(32.dp))
-                        
-                        Text(
+                        MobileText(
                             text = "Seasons",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MobileMaterialTheme.typography.titleLarge,
                             color = CinematicText
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            contentPadding = PaddingValues(bottom = 32.dp)
-                        ) {
-                            items(availableSeasons.size) { index ->
-                                val seasonId = availableSeasons[index]
-                                val seasonName = data.seasonNames[seasonId] ?: "Season ${seasonId.replace("s", "")}"
-                                val episodeCount = data.episodes.count { it.seasonId == seasonId }
-                                
-                                Button(
-                                    onClick = { onSeasonClick(seasonId) },
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.6f)
-                                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
-                                    colors = ButtonDefaults.colors(
-                                        containerColor = CinematicSurface,
-                                        focusedContainerColor = CinematicAccent
-                                    ),
-                                    shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
+                        availableSeasons.forEach { seasonId ->
+                            val seasonName = data.seasonNames[seasonId] ?: "Season ${seasonId.replace("s", "")}"
+                            val episodeCount = data.episodes.count { it.seasonId == seasonId }
+                            
+                            MobileButton(
+                                onClick = { onSeasonClick(seasonId) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                colors = MobileButtonDefaults.buttonColors(
+                                    containerColor = CinematicSurface
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    MobileText(seasonName, color = CinematicText)
+                                    MobileText("$episodeCount Eps", color = CinematicTextSecondary)
+                                }
+                            }
+                        }
+                        
+                        // Add some bottom padding
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                } else {
+                    // TV Layout
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(48.dp)
+                    ) {
+                        // Left: Poster
+                        Card(
+                            onClick = {}, 
+                            shape = CardDefaults.shape(RoundedCornerShape(12.dp)),
+                            modifier = Modifier
+                                .width(300.dp)
+                                .aspectRatio(2f/3f),
+                            colors = CardDefaults.colors(containerColor = Color.Transparent)
+                        ) {
+                            AsyncImage(
+                                model = displayPoster,
+                                contentDescription = "Poster",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(48.dp))
+
+                        // Right: Info & Seasons
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = data.title,
+                                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = CinematicText,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                // Favorite Button
+                                Button(
+                                    onClick = onToggleFavorite,
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = if (isFavorite) Color(0xFF332F00) else CinematicSurface,
+                                        focusedContainerColor = if (isFavorite) Color(0xFF665C00) else CinematicAccent
+                                    ),
+                                    shape = ButtonDefaults.shape(RoundedCornerShape(50))
+                                ) {
+                                    Text(
+                                        text = if (isFavorite) "★ Favorited" else "☆ Add to Favorites",
+                                        color = if (isFavorite) Color(0xFFFFD700) else CinematicText
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            // Genres
+                            Row {
+                                data.genres.take(4).forEach { genre ->
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(end = 8.dp)
+                                            .background(CinematicSurface, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
-                                        Text(seasonName, color = CinematicText)
-                                        Text("$episodeCount Eps", color = CinematicTextSecondary)
+                                        Text(
+                                            text = genre,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = CinematicTextSecondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(24.dp))
+                            
+                            Text(
+                                text = data.description,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = CinematicTextSecondary,
+                                maxLines = 4,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(32.dp))
+                            
+                            Text(
+                                text = "Seasons",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = CinematicText
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(bottom = 32.dp)
+                            ) {
+                                items(availableSeasons.size) { index ->
+                                    val seasonId = availableSeasons[index]
+                                    val seasonName = data.seasonNames[seasonId] ?: "Season ${seasonId.replace("s", "")}"
+                                    val episodeCount = data.episodes.count { it.seasonId == seasonId }
+                                    
+                                    Button(
+                                        onClick = { onSeasonClick(seasonId) },
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.6f)
+                                            .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
+                                        colors = ButtonDefaults.colors(
+                                            containerColor = CinematicSurface,
+                                            focusedContainerColor = CinematicAccent
+                                        ),
+                                        shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(seasonName, color = CinematicText)
+                                            Text("$episodeCount Eps", color = CinematicTextSecondary)
+                                        }
                                     }
                                 }
                             }
