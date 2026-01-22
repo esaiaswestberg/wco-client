@@ -2,13 +2,23 @@ package com.example.wco_tv.ui.screens
 
 import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -19,7 +29,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.example.wco_tv.CinematicAccent
+import com.example.wco_tv.CinematicText
 import com.example.wco_tv.WORKING_USER_AGENT
 import com.example.wco_tv.data.local.CacheManager
 import com.example.wco_tv.data.model.VideoQuality
@@ -41,10 +54,28 @@ fun PlayerScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isEnded by remember { mutableStateOf(false) }
 
+    // Player State for UI
+    var isPlaying by remember { mutableStateOf(false) }
+    var playbackPosition by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(0L) }
+
     Log.d("WCO_TV_PLAYER", "Initializing Player with URL: $currentUrl")
 
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()
+    }
+
+    // Helper to format time
+    fun formatTime(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val seconds = totalSeconds % 60
+        val minutes = (totalSeconds / 60) % 60
+        val hours = totalSeconds / 3600
+        return if (hours > 0) {
+            "%d:%02d:%02d".format(hours, minutes, seconds)
+        } else {
+            "%02d:%02d".format(minutes, seconds)
+        }
     }
 
     // Base headers
@@ -104,6 +135,8 @@ fun PlayerScreen(
                 errorMessage = "Playback Error: ${error.errorCodeName}\n${error.message}"
             }
             override fun onPlaybackStateChanged(state: Int) {
+                isPlaying = exoPlayer.isPlaying
+                duration = exoPlayer.duration.coerceAtLeast(0L)
                 if (state == Player.STATE_ENDED && !isEnded) {
                     isEnded = true
                     // Clear progress on finish so it restarts next time
@@ -112,6 +145,9 @@ fun PlayerScreen(
                         onPlayNext()
                     }
                 }
+            }
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
             }
         }
         exoPlayer.addListener(listener)
@@ -127,19 +163,22 @@ fun PlayerScreen(
         }
     }
 
-    // Progress Polling for saving state
+    // Progress Polling for UI and saving state
     LaunchedEffect(exoPlayer, isEnded) {
         while (!isEnded) {
-            val duration = exoPlayer.duration
-            val position = exoPlayer.currentPosition
+            val d = exoPlayer.duration
+            val p = exoPlayer.currentPosition
             
-            if (duration > 0) {
+            duration = d.coerceAtLeast(0L)
+            playbackPosition = p.coerceAtLeast(0L)
+            
+            if (d > 0) {
                 // Save progress periodically (every 5s)
-                if (position > 5000 && (duration - position) > 10000) { // Don't save if just started or nearly finished
-                     cacheManager.savePlaybackProgress(episodeUrl, position, duration)
+                if (p > 5000 && (d - p) > 10000) { // Don't save if just started or nearly finished
+                     cacheManager.savePlaybackProgress(episodeUrl, p, d)
                 }
             }
-            delay(1000)
+            delay(500) // Poll faster for smooth UI progress
         }
     }
 
@@ -161,6 +200,101 @@ fun PlayerScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Custom Player Controls Overlay
+            PlayerControls(
+                isPlaying = isPlaying,
+                currentPosition = playbackPosition,
+                duration = duration,
+                formattedTime = "${formatTime(playbackPosition)} / ${formatTime(duration)}",
+                onTogglePlayPause = {
+                    if (exoPlayer.isPlaying) {
+                        exoPlayer.pause()
+                    } else {
+                        exoPlayer.play()
+                    }
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun PlayerControls(
+    isPlaying: Boolean,
+    currentPosition: Long,
+    duration: Long,
+    formattedTime: String,
+    onTogglePlayPause: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.Black.copy(alpha = 0.8f)
+                    )
+                )
+            )
+            .padding(horizontal = 48.dp, vertical = 32.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // 1. Current time / Duration
+            Text(
+                text = formattedTime,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 18.sp
+                ),
+                color = CinematicText
+            )
+
+            // 2. Seek bar
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp),
+                color = CinematicAccent,
+                trackColor = Color.White.copy(alpha = 0.2f)
+            )
+
+            // 3. Play/Pause button and Cog
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onTogglePlayPause) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Cog button
+                IconButton(onClick = { /* Design only */ }) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
         }
     }
 }
