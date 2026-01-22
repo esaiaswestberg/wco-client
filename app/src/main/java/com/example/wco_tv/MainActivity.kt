@@ -35,11 +35,13 @@ import com.example.wco_tv.data.local.CacheManager
 import com.example.wco_tv.data.model.Cartoon
 import com.example.wco_tv.data.model.CartoonDetails
 import com.example.wco_tv.data.model.Episode
+import com.example.wco_tv.data.model.VideoQuality
 import com.example.wco_tv.ui.screens.DetailsScreen
 import com.example.wco_tv.ui.screens.HomeScreen
 import com.example.wco_tv.ui.screens.SeasonEpisodesScreen
 import com.example.wco_tv.ui.screens.PlayerScreen
 import com.example.wco_tv.data.remote.TvMazeRepository
+import com.example.wco_tv.data.remote.WcoVideoFetcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
@@ -119,6 +121,7 @@ fun AppNavigation() {
     // Player State
     var isPlayerLoading by remember { mutableStateOf(false) }
     var currentVideoUrl by remember { mutableStateOf<String?>(null) }
+    var currentQualities by remember { mutableStateOf<List<VideoQuality>>(emptyList()) }
     var currentEpisodeIndex by remember { mutableStateOf(-1) }
 
     // Helper to request HTML
@@ -133,27 +136,23 @@ fun AppNavigation() {
         val episodeUrl = if (episode.url.startsWith("http")) episode.url else "https://www.wcoflix.tv${episode.url}"
         Log.d("WCO_TV", "Resolving Episode URL: $episodeUrl")
         
-        requestHtml(episodeUrl) { episodeHtml, _ ->
-            val iframeUrl = parseIframeUrl(episodeHtml)
-            if (iframeUrl != null) {
-                Log.d("WCO_TV", "Found Iframe URL: $iframeUrl")
-                requestHtml(iframeUrl) { iframeHtml, detectedVideoUrl ->
-                    val videoUrl = detectedVideoUrl ?: parseVideoUrl(iframeHtml)
-                    if (videoUrl != null) {
-                        Log.d("WCO_TV", "Resolved Video URL: $videoUrl")
-                        currentVideoUrl = videoUrl
-                        isPlayerLoading = false
-                        if (navController.currentDestination?.route != "player") {
-                            navController.navigate("player")
-                        }
-                    } else {
-                        Log.e("WCO_TV", "Could not find video URL")
-                        isPlayerLoading = false
+        scope.launch(Dispatchers.IO) {
+            val qualities = WcoVideoFetcher.fetchVideoQualities(episodeUrl)
+            launch(Dispatchers.Main) {
+                if (qualities.isNotEmpty()) {
+                    Log.d("WCO_TV", "Resolved ${qualities.size} qualities")
+                    currentQualities = qualities
+                    // Default to best quality (first one usually 1080p in our fetcher logic if added first)
+                    // Our fetcher adds 1080p, then 720p, then SD. So first is best.
+                    currentVideoUrl = qualities.first().url
+                    isPlayerLoading = false
+                    if (navController.currentDestination?.route != "player") {
+                        navController.navigate("player")
                     }
+                } else {
+                    Log.e("WCO_TV", "Could not find any video URLs")
+                    isPlayerLoading = false
                 }
-            } else {
-                Log.e("WCO_TV", "Could not find iframe URL")
-                isPlayerLoading = false
             }
         }
     }
@@ -327,6 +326,7 @@ fun AppNavigation() {
                 if (currentEpisode != null) {
                     PlayerScreen(
                         videoUrl = url,
+                        qualities = currentQualities,
                         episodeUrl = currentEpisode.url, // Pass stable WCO URL for cache key
                         cacheManager = cacheManager,
                         nextEpisodeTitle = nextEpisode?.title,
@@ -345,34 +345,8 @@ fun AppNavigation() {
 }
 
 // Parsing helpers for video
-fun parseIframeUrl(html: String): String? {
-    val doc = org.jsoup.Jsoup.parse(html)
-    return doc.select("div.iframe-16x9 iframe").attr("src").ifEmpty {
-        doc.select("iframe#cizgi-js-0").attr("src")
-    }.let { 
-        if (it.isNotEmpty() && !it.startsWith("http")) "https:$it" else it.ifEmpty { null }
-    }
-}
-
-fun parseVideoUrl(html: String): String? {
-    val doc = org.jsoup.Jsoup.parse(html)
-    val videoTag = doc.select("video source").attr("src").ifEmpty {
-        doc.select("video").attr("src")
-    }
-    if (videoTag.isNotEmpty()) return videoTag
-
-    val scripts = doc.select("script").map { it.data() }
-    for (script in scripts) {
-        val regex = """["'](https?://[^"']+\.(?:mp4|m3u8|flv)[^"']*)["']""".toRegex()
-        val match = regex.find(script)
-        if (match != null) return match.groupValues[1]
-        
-        val fileRegex = """file\s*:\s*["']([^"']+)["']""".toRegex()
-        val fileMatch = fileRegex.find(script)
-        if (fileMatch != null) return fileMatch.groupValues[1]
-    }
-    return null
-}
+// fun parseIframeUrl(html: String): String? { ... } (Removed)
+// fun parseVideoUrl(html: String): String? { ... } (Removed)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable

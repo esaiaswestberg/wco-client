@@ -32,6 +32,7 @@ import com.example.wco_tv.CinematicAccent
 import com.example.wco_tv.CinematicSurface
 import com.example.wco_tv.WORKING_USER_AGENT
 import com.example.wco_tv.data.local.CacheManager
+import com.example.wco_tv.data.model.VideoQuality
 import kotlinx.coroutines.delay
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -41,6 +42,7 @@ import androidx.compose.ui.focus.focusRequester
 @Composable
 fun PlayerScreen(
     videoUrl: String,
+    qualities: List<VideoQuality> = emptyList(),
     episodeUrl: String,
     cacheManager: CacheManager,
     nextEpisodeTitle: String? = null,
@@ -48,16 +50,25 @@ fun PlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    var currentUrl by remember { mutableStateOf(videoUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var timeLeft by remember { mutableStateOf<Long?>(null) }
     var isEnded by remember { mutableStateOf(false) }
     val nextButtonFocusRequester = remember { FocusRequester() }
     
-    Log.d("WCO_TV_PLAYER", "Initializing Player with URL: $videoUrl")
+    // Quality selection state
+    var showQualitySelector by remember { mutableStateOf(false) }
+    val qualityButtonFocusRequester = remember { FocusRequester() }
+
+    Log.d("WCO_TV_PLAYER", "Initializing Player with URL: $currentUrl")
 
     val exoPlayer = remember {
-        // EXACT HEADERS FROM SUCCESSFUL CURL TEST
-        val headers = mapOf(
+        ExoPlayer.Builder(context).build()
+    }
+
+    // Base headers
+    val baseHeaders = remember {
+        mapOf(
             "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language" to "en-US,en;q=0.5",
             "Sec-GPC" to "1",
@@ -67,26 +78,36 @@ fun PlayerScreen(
             "Pragma" to "no-cache",
             "Cache-Control" to "no-cache"
         )
-        
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(WORKING_USER_AGENT)
-            .setDefaultRequestProperties(headers)
-
-        ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))
-            .build()
     }
 
     // Load media when URL changes
-    LaunchedEffect(videoUrl) {
-        val mediaItem = MediaItem.fromUri(videoUrl)
-        exoPlayer.setMediaItem(mediaItem)
+    LaunchedEffect(currentUrl) {
+        val currentPos = exoPlayer.currentPosition
         
-        // Restore progress
-        val savedInfo = cacheManager.getPlaybackProgress(episodeUrl)
-        if (savedInfo != null && savedInfo.position > 0) {
-            Log.d("WCO_TV_PLAYER", "Restoring playback position: ${savedInfo.position} ms")
-            exoPlayer.seekTo(savedInfo.position)
+        // Find headers for this quality
+        val qualityHeaders = qualities.find { it.url == currentUrl }?.headers ?: emptyMap()
+        val allHeaders = baseHeaders + qualityHeaders
+        
+        Log.d("WCO_TV_PLAYER", "Playing with headers: $allHeaders")
+
+        val dataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(WORKING_USER_AGENT)
+            .setDefaultRequestProperties(allHeaders)
+            
+        val mediaSource = DefaultMediaSourceFactory(dataSourceFactory)
+            .createMediaSource(MediaItem.fromUri(currentUrl))
+
+        exoPlayer.setMediaSource(mediaSource)
+        
+        if (currentPos > 0) {
+             exoPlayer.seekTo(currentPos)
+        } else {
+            // Restore progress only on initial load (when pos is 0)
+            val savedInfo = cacheManager.getPlaybackProgress(episodeUrl)
+            if (savedInfo != null && savedInfo.position > 0) {
+                Log.d("WCO_TV_PLAYER", "Restoring playback position: ${savedInfo.position} ms")
+                exoPlayer.seekTo(savedInfo.position)
+            }
         }
         
         exoPlayer.prepare()
@@ -159,10 +180,52 @@ fun PlayerScreen(
                         useController = true
                         keepScreenOn = true
                         setShowNextButton(false) // Hide default next button
+                        
+                        // Custom controller visibility listener could go here
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
+            
+            // Quality Selector
+            if (qualities.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    if (showQualitySelector) {
+                        Row(
+                            modifier = Modifier
+                                .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            qualities.forEach { quality ->
+                                Button(
+                                    onClick = {
+                                        currentUrl = quality.url
+                                        showQualitySelector = false
+                                    },
+                                    modifier = Modifier.padding(horizontal = 4.dp),
+                                    colors = ButtonDefaults.colors(
+                                        containerColor = if (currentUrl == quality.url) CinematicAccent else Color.Gray
+                                    )
+                                ) {
+                                    Text(quality.label)
+                                }
+                            }
+                        }
+                    } else {
+                         Button(
+                            onClick = { showQualitySelector = true },
+                            colors = ButtonDefaults.colors(containerColor = Color.Black.copy(alpha = 0.5f)),
+                            modifier = Modifier.focusRequester(qualityButtonFocusRequester)
+                        ) {
+                            Text("Quality")
+                        }
+                    }
+                }
+            }
             
             // "Next Episode" Overlay
             if (nextEpisodeTitle != null && timeLeft != null && timeLeft!! < 30000 && !isEnded) {
