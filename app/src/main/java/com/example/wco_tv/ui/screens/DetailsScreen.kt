@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -26,6 +28,7 @@ import com.example.wco_tv.data.model.CartoonDetails
 import com.example.wco_tv.data.model.Episode
 import org.jsoup.Jsoup
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.wco_tv.data.remote.TvMazeRepository
 
@@ -45,6 +48,7 @@ fun DetailsScreen(
     var details by remember { mutableStateOf<CartoonDetails?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var artwork by remember { mutableStateOf<CacheManager.Artwork?>(null) }
+    val focusRequester = remember { FocusRequester() }
     
     // We need a scope for async operations initiated by callbacks
     val scope = rememberCoroutineScope()
@@ -80,6 +84,14 @@ fun DetailsScreen(
             
             val availableSeasons = data.episodes.map { it.seasonId }.distinct().sortedBy { 
                 it.replace("s", "").toIntOrNull() ?: 999 
+            }
+
+            // Auto-focus first season when list loads
+            LaunchedEffect(availableSeasons.isNotEmpty()) {
+                if (availableSeasons.isNotEmpty()) {
+                    delay(100)
+                    focusRequester.requestFocus()
+                }
             }
             
             Box(modifier = Modifier.fillMaxSize()) {
@@ -206,13 +218,16 @@ fun DetailsScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(bottom = 32.dp)
                         ) {
-                            items(availableSeasons) { seasonId ->
+                            items(availableSeasons.size) { index ->
+                                val seasonId = availableSeasons[index]
                                 val seasonName = data.seasonNames[seasonId] ?: "Season ${seasonId.replace("s", "")}"
                                 val episodeCount = data.episodes.count { it.seasonId == seasonId }
                                 
                                 Button(
                                     onClick = { onSeasonClick(seasonId) },
-                                    modifier = Modifier.fillMaxWidth(0.6f),
+                                    modifier = Modifier
+                                        .fillMaxWidth(0.6f)
+                                        .then(if (index == 0) Modifier.focusRequester(focusRequester) else Modifier),
                                     colors = ButtonDefaults.colors(
                                         containerColor = CinematicSurface,
                                         focusedContainerColor = CinematicAccent
