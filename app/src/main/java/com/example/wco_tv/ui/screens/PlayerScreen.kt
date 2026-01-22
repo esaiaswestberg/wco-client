@@ -157,6 +157,7 @@ fun PlayerScreen(
                     PlayerView(ctx).apply {
                         player = exoPlayer
                         useController = true
+                        keepScreenOn = true
                         setShowNextButton(false) // Hide default next button
                     }
                 },
