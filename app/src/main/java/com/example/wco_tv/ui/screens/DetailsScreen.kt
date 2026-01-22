@@ -82,9 +82,17 @@ fun DetailsScreen(
             // Use specific background if available, otherwise fallback to poster
             val displayBackground = artwork?.backgroundUrl ?: displayPoster
             
-            val availableSeasons = data.episodes.map { it.seasonId }.distinct().sortedBy { 
-                it.replace("s", "").toIntOrNull() ?: 999 
-            }
+            val availableSeasons = data.episodes.map { it.seasonId }.distinct().sortedWith(
+                compareByDescending<String> { id ->
+                    val name = data.seasonNames[id] ?: "Season ${id.replace("s", "")}"
+                    name.contains(Regex("Season\\s+\\d+", RegexOption.IGNORE_CASE))
+                }.thenByDescending { id ->
+                    val name = data.seasonNames[id] ?: "Season ${id.replace("s", "")}"
+                    Regex("\\d+").find(name)?.value?.toIntOrNull() ?: -1
+                }.thenBy { id ->
+                    data.seasonNames[id] ?: "Season ${id.replace("s", "")}"
+                }
+            )
 
             // Auto-focus first season when list loads
             LaunchedEffect(availableSeasons.isNotEmpty()) {
