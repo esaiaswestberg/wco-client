@@ -99,8 +99,8 @@ fun PlayerScreen(
     }
 
     // Auto-hide timer
-    LaunchedEffect(areControlsVisible, lastInteractionTime, isSettingsOpen) {
-        if (areControlsVisible && !isSettingsOpen) {
+    LaunchedEffect(areControlsVisible, lastInteractionTime, isSettingsOpen, isPlaying) {
+        if (areControlsVisible && !isSettingsOpen && isPlaying) {
             delay(10000)
             areControlsVisible = false
         }
