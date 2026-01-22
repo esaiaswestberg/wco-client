@@ -2,6 +2,7 @@ package com.example.wco_tv.ui.screens
 
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -214,6 +216,10 @@ fun PlayerScreen(
                         exoPlayer.play()
                     }
                 },
+                onSeek = { newPosition ->
+                    exoPlayer.seekTo(newPosition)
+                    playbackPosition = newPosition
+                },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
@@ -228,6 +234,7 @@ fun PlayerControls(
     duration: Long,
     formattedTime: String,
     onTogglePlayPause: () -> Unit,
+    onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
@@ -259,15 +266,40 @@ fun PlayerControls(
                 color = CinematicText
             )
 
-            // 2. Seek bar
-            LinearProgressIndicator(
-                progress = { progress },
+            // 2. Seek bar (Interacting with D-pad)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(8.dp),
-                color = CinematicAccent,
-                trackColor = Color.White.copy(alpha = 0.2f)
-            )
+                    .height(16.dp)
+                    .focusable()
+                    .onKeyEvent { keyEvent ->
+                        if (keyEvent.type == KeyEventType.KeyDown) {
+                            when (keyEvent.key) {
+                                Key.DirectionLeft -> {
+                                    val newPos = (currentPosition - 10000).coerceAtLeast(0L)
+                                    onSeek(newPos)
+                                    true
+                                }
+                                Key.DirectionRight -> {
+                                    val newPos = (currentPosition + 10000).coerceAtMost(duration)
+                                    onSeek(newPos)
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else false
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = CinematicAccent,
+                    trackColor = Color.White.copy(alpha = 0.2f)
+                )
+            }
 
             // 3. Play/Pause button and Cog
             Row(
