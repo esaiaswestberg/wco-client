@@ -290,6 +290,10 @@ fun PlayerControls(
                                     onSeek(newPos)
                                     true
                                 }
+                                Key.Enter, Key.DirectionCenter, Key.NumPadEnter -> {
+                                    onTogglePlayPause()
+                                    true
+                                }
                                 else -> false
                             }
                         } else false
