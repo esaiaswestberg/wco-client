@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -24,6 +26,7 @@ import com.example.wco_tv.CinematicTextSecondary
 import com.example.wco_tv.data.model.CartoonDetails
 import com.example.wco_tv.data.model.Episode
 import com.example.wco_tv.data.local.CacheManager
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -48,10 +51,20 @@ fun SeasonEpisodesScreen(
         cartoonDetails.episodes.filter { it.seasonId == seasonId }.reversed()
     }
     
+    val focusRequester = remember { FocusRequester() }
+
     // Load progress
     var progressMap by remember { mutableStateOf<Map<String, CacheManager.PlaybackInfo>>(emptyMap()) }
     LaunchedEffect(Unit) {
         progressMap = cacheManager.getAllPlaybackProgress()
+    }
+
+    // Auto-focus first episode when list loads
+    LaunchedEffect(episodes.isNotEmpty()) {
+        if (episodes.isNotEmpty()) {
+            delay(100)
+            focusRequester.requestFocus()
+        }
     }
 
     Column(
@@ -62,18 +75,6 @@ fun SeasonEpisodesScreen(
     ) {
         // Header
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
-                onClick = onBack,
-                modifier = Modifier.padding(end = 24.dp),
-                colors = ButtonDefaults.colors(
-                    containerColor = CinematicSurface,
-                    focusedContainerColor = CinematicAccent
-                ),
-                shape = ButtonDefaults.shape(RoundedCornerShape(50))
-            ) {
-                Text(text = "← Back", modifier = Modifier.padding(horizontal = 8.dp))
-            }
-            
             Column {
                 Text(
                     text = cartoonDetails.title,
@@ -101,6 +102,7 @@ fun SeasonEpisodesScreen(
                     episode = episode,
                     index = index + 1,
                     progress = progressMap[episode.url],
+                    modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
                     onClick = { onEpisodeClick(episode) }
                 )
             }
@@ -114,73 +116,57 @@ fun EpisodeItem(
     episode: Episode,
     index: Int,
     progress: CacheManager.PlaybackInfo?,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
-    Surface(
+    Button(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth(0.6f)
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (isFocused) CinematicAccent else CinematicSurface,
-            contentColor = CinematicText,
-            focusedContainerColor = CinematicAccent,
-            focusedContentColor = CinematicText
+        colors = ButtonDefaults.colors(
+            containerColor = CinematicSurface,
+            focusedContainerColor = CinematicAccent
         ),
-        border = ClickableSurfaceDefaults.border(
-            border = Border(
-                border = androidx.compose.foundation.BorderStroke(
-                    width = if (isFocused) 2.dp else 0.dp,
-                    color = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp)
-            )
-        )
+        shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
     ) {
-        Column {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Episode Number
                 Text(
-                    text = index.toString().padStart(2, '0'),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = if (isFocused) Color.White else CinematicTextSecondary.copy(alpha = 0.5f),
-                    modifier = Modifier.width(60.dp)
-                )
-
-                // Title
-                Text(
-                    text = episode.title,
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = "${index.toString().padStart(2, '0')}. ${episode.title}",
+                    color = CinematicText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = Color.White,
                     modifier = Modifier.weight(1f)
                 )
-                
-                // Play Icon (Visual hint)
-                if (isFocused) {
-                    Text(text = "▶", color = Color.White)
+                // We can keep the "Eps" style count logic or just show playback hint
+                if (progress != null && progress.position > 0) {
+                    Text(
+                        text = "Resume",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isFocused) Color.White else CinematicAccent,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
             }
-            
-            // Progress Bar
+
+            // Progress Bar (Integrated into the bottom of the button)
             if (progress != null && progress.duration > 0 && progress.position > 0) {
                 val fraction = (progress.position.toFloat() / progress.duration.toFloat()).coerceIn(0f, 1f)
-                // Don't show if basically finished (e.g. > 95%) or barely started (< 5%)
                 if (fraction in 0.05f..0.95f) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp)
-                            .background(Color.Black.copy(alpha = 0.5f))
+                            .height(2.dp)
+                            .background(Color.Black.copy(alpha = 0.3f))
                     ) {
                         Box(
                             modifier = Modifier

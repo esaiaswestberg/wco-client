@@ -270,8 +270,17 @@ fun parseDetails(html: String): CartoonDetails {
         value to name
     }.filterKeys { it != "all" }
     val episodes = doc.select("div#episodeList a.dark-episode-item").map {
+        val rawTitle = it.select("span").firstOrNull()?.text() ?: it.text()
+        val cleanedTitle = rawTitle
+            .replace(Regex(".*Season\\s+\\d+\\s+Episode\\s+\\d+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex(".*Episode\\s+\\d+", RegexOption.IGNORE_CASE), "")
+            .trim()
+            .removePrefix("-")
+            .trim()
+            .ifEmpty { rawTitle }
+
         Episode(
-            title = it.select("span").firstOrNull()?.text() ?: it.text(),
+            title = cleanedTitle,
             url = it.attr("href"),
             seasonId = it.attr("data-season").ifEmpty { "s1" }
         )
