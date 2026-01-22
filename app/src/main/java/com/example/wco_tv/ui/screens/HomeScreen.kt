@@ -1,3 +1,4 @@
+@file:OptIn(ExperimentalTvMaterial3Api::class)
 package com.example.wco_tv.ui.screens
 
 import androidx.compose.animation.Crossfade
@@ -39,8 +40,12 @@ import com.example.wco_tv.data.remote.TvMazeRepository
 import kotlinx.coroutines.delay
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.clickable
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
     cartoons: List<Cartoon>,
@@ -55,15 +60,18 @@ fun HomeScreen(
     val gridState = rememberTvLazyGridState()
     val focusRequester = remember { FocusRequester() }
     
+    val configuration = LocalConfiguration.current
+    val isCompact = configuration.screenWidthDp < 600
+    
     // Filter logic
     val filteredCartoons = remember(searchQuery, cartoons) {
         if (searchQuery.isBlank()) cartoons
         else cartoons.filter { it.title.contains(other = searchQuery, ignoreCase = true) }
     }
     
-    // Auto-focus first item when list loads
-    LaunchedEffect(filteredCartoons.isNotEmpty()) {
-        if (filteredCartoons.isNotEmpty()) {
+    // Auto-focus first item when list loads (Only on TV)
+    LaunchedEffect(filteredCartoons.isNotEmpty(), isCompact) {
+        if (filteredCartoons.isNotEmpty() && !isCompact) {
             delay(100) // Small delay to let UI compose
             focusRequester.requestFocus()
         }
@@ -159,29 +167,28 @@ fun HomeScreen(
         } else {
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
                 // Header Row
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "WCO FLIX",
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
-                            color = CinematicAccent
-                        )
-                        Text(
-                            text = "${filteredCartoons.size} Titles Available",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = CinematicTextSecondary
-                        )
-                    }
-                    
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Search Input (Custom styled)
+                if (isCompact) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "WCO FLIX",
+                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                                color = CinematicAccent
+                            )
+                            Text(
+                                text = "${filteredCartoons.size} Titles Available",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = CinematicTextSecondary
+                            )
+                        }
+
+                        // Search Input (Full width)
                         Box(
                             modifier = Modifier
-                                .width(350.dp)
+                                .fillMaxWidth()
                                 .background(CinematicSurface, RoundedCornerShape(50))
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
@@ -201,46 +208,121 @@ fun HomeScreen(
                                 }
                             )
                         }
-                        
-                        Spacer(modifier = Modifier.width(16.dp))
-                        
+
                         Button(
                             onClick = onSettingsClick,
                             shape = ButtonDefaults.shape(RoundedCornerShape(50)),
                             colors = ButtonDefaults.colors(
                                 containerColor = CinematicSurface,
                                 focusedContainerColor = CinematicAccent
-                            )
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Settings", color = CinematicText)
                         }
                     }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "WCO FLIX",
+                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+                                color = CinematicAccent
+                            )
+                            Text(
+                                text = "${filteredCartoons.size} Titles Available",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = CinematicTextSecondary
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Search Input (Custom styled)
+                            Box(
+                                modifier = Modifier
+                                    .width(350.dp)
+                                    .background(CinematicSurface, RoundedCornerShape(50))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        color = CinematicText,
+                                        fontSize = 16.sp
+                                    ),
+                                    singleLine = true,
+                                    decorationBox = { innerTextField ->
+                                        if (searchQuery.isEmpty()) {
+                                            Text("Search cartoons...", color = CinematicTextSecondary.copy(alpha = 0.5f))
+                                        }
+                                        innerTextField()
+                                    }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Button(
+                                onClick = onSettingsClick,
+                                shape = ButtonDefaults.shape(RoundedCornerShape(50)),
+                                colors = ButtonDefaults.colors(
+                                    containerColor = CinematicSurface,
+                                    focusedContainerColor = CinematicAccent
+                                )
+                            ) {
+                                Text("Settings", color = CinematicText)
+                            }
+                        }
+                    }
                 }
 
-                TvLazyVerticalGrid(
-                    state = gridState,
-                    columns = TvGridCells.Fixed(5),
-                    // Optimized top padding to balance space and prevent clipping
-                    contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredCartoons.size) { index ->
-                        val cartoon = filteredCartoons[index]
-                        CartoonCard(
-                            cartoon = cartoon, 
-                            isFavorite = favorites.contains(cartoon.title),
-                            modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
-                            onClick = { onCartoonClick(cartoon) },
-                            onFocus = {
-                                // Update background when focused
-                                val cached = TvMazeRepository.getCachedArtwork(cartoon.title)
-                                if (cached != null) {
-                                    activeBackground = cached.backgroundUrl ?: cached.posterUrl
+                if (isCompact) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredCartoons) { cartoon ->
+                            MobileCartoonCard(
+                                cartoon = cartoon,
+                                isFavorite = favorites.contains(cartoon.title),
+                                onClick = { onCartoonClick(cartoon) }
+                            )
+                        }
+                    }
+                } else {
+                    TvLazyVerticalGrid(
+                        state = gridState,
+                        columns = TvGridCells.Fixed(5),
+                        // Optimized top padding to balance space and prevent clipping
+                        contentPadding = PaddingValues(top = 32.dp, bottom = 32.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(filteredCartoons.size) { index ->
+                            val cartoon = filteredCartoons[index]
+                            TvCartoonCard(
+                                cartoon = cartoon, 
+                                isFavorite = favorites.contains(cartoon.title),
+                                modifier = if (index == 0) Modifier.focusRequester(focusRequester) else Modifier,
+                                onClick = { onCartoonClick(cartoon) },
+                                onFocus = {
+                                    // Update background when focused
+                                    val cached = TvMazeRepository.getCachedArtwork(cartoon.title)
+                                    if (cached != null) {
+                                        activeBackground = cached.backgroundUrl ?: cached.posterUrl
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -248,39 +330,23 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun CartoonCard(
+fun CartoonCardContent(
     cartoon: Cartoon,
     isFavorite: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    onFocus: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
     var artworkUrl by remember { mutableStateOf<String?>(null) }
     
-    // Notify parent on focus
-    LaunchedEffect(isFocused) {
-        if (isFocused) {
-            onFocus()
-        }
-    }
-
     // Lazy load artwork with debounce
     LaunchedEffect(cartoon.title) {
-        // Debounce: Wait 500ms to ensure user is actually looking at this item
-        // and not just flinging past it. This saves bandwidth and API limits.
         delay(500)
         val artwork = TvMazeRepository.searchShow(cartoon.title)
         if (artwork?.posterUrl != null) {
             artworkUrl = artwork.posterUrl
-            // Also notify focus if we just loaded the art and are currently focused
-            if (isFocused) onFocus()
         }
     }
-    
-    // Generate a deterministic color based on the title hash (Fallback)
+
     val hash = cartoon.title.hashCode()
     val hue = kotlin.math.abs(hash % 360).toFloat()
     val baseColor = Color.hsv(hue, 0.6f, 0.4f)
@@ -290,6 +356,108 @@ fun CartoonCard(
             Color.Black.copy(alpha = 0.8f)
         )
     )
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(CinematicSurface) 
+    ) {
+        if (artworkUrl != null) {
+            AsyncImage(
+                model = artworkUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.9f)
+                            )
+                        )
+                    )
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(gradientBrush)
+            )
+        }
+
+        if (isFavorite) {
+            Text(
+                text = "★",
+                color = Color(0xFFFFD700),
+                fontSize = 20.sp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .zIndex(2f)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            contentAlignment = Alignment.BottomStart
+        ) {
+             Text(
+                text = cartoon.title,
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    shadow = androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        blurRadius = 4f
+                    )
+                ),
+                color = CinematicText,
+                textAlign = TextAlign.Start,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun MobileCartoonCard(
+    cartoon: Cartoon,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(2f / 3f)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+    ) {
+        CartoonCardContent(cartoon, isFavorite)
+    }
+}
+
+@Composable
+fun TvCartoonCard(
+    cartoon: Cartoon,
+    isFavorite: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onFocus: () -> Unit = {}
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    
+    // Notify parent on focus
+    LaunchedEffect(isFocused) {
+        if (isFocused) {
+            onFocus()
+        }
+    }
 
     val scale = if (isFocused) 1.1f else 1f
 
@@ -318,76 +486,6 @@ fun CartoonCard(
             )
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(CinematicSurface) // Default background while loading
-        ) {
-            if (artworkUrl != null) {
-                // Show fetched artwork
-                AsyncImage(
-                    model = artworkUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                // Dark overlay for text readability
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.9f)
-                                )
-                            )
-                        )
-                )
-            } else {
-                // Show Fallback Gradient
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(gradientBrush)
-                )
-            }
-
-            // Favorite Star Indicator
-            if (isFavorite) {
-                Text(
-                    text = "★",
-                    color = Color(0xFFFFD700), // Gold
-                    fontSize = 20.sp,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .zIndex(2f)
-                )
-            }
-
-            // Text Overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp),
-                contentAlignment = Alignment.BottomStart
-            ) {
-                 Text(
-                    text = cartoon.title,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        shadow = androidx.compose.ui.graphics.Shadow(
-                            color = Color.Black,
-                            blurRadius = 4f
-                        )
-                    ),
-                    color = CinematicText,
-                    textAlign = TextAlign.Start,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
+        CartoonCardContent(cartoon, isFavorite)
     }
 }
