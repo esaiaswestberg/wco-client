@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -14,6 +15,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
@@ -238,6 +241,7 @@ fun PlayerControls(
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
+    var isSeekBarFocused by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -267,10 +271,11 @@ fun PlayerControls(
             )
 
             // 2. Seek bar (Interacting with D-pad)
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(16.dp)
+                    .height(24.dp)
+                    .onFocusChanged { isSeekBarFocused = it.isFocused }
                     .focusable()
                     .onKeyEvent { keyEvent ->
                         if (keyEvent.type == KeyEventType.KeyDown) {
@@ -289,16 +294,28 @@ fun PlayerControls(
                             }
                         } else false
                     },
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.CenterStart
             ) {
+                // Track
                 LinearProgressIndicator(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp),
+                        .height(if (isSeekBarFocused) 10.dp else 8.dp),
                     color = CinematicAccent,
                     trackColor = Color.White.copy(alpha = 0.2f)
                 )
+                
+                // Thumb
+                if (isSeekBarFocused) {
+                    val thumbOffset = maxWidth * progress
+                    Box(
+                        modifier = Modifier
+                            .offset(x = thumbOffset - 8.dp)
+                            .size(16.dp)
+                            .background(Color.White, CircleShape)
+                    )
+                }
             }
 
             // 3. Play/Pause button and Cog
