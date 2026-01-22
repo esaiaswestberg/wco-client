@@ -32,6 +32,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -586,9 +587,11 @@ fun PlayerControls(
                     progress = { progress },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (isSeekBarFocused) 10.dp else 8.dp),
+                        .height(if (isSeekBarFocused) 10.dp else 8.dp)
+                        .clip(CircleShape),
                     color = CinematicAccent,
-                    trackColor = Color.White.copy(alpha = 0.2f)
+                    trackColor = Color.White.copy(alpha = 0.2f),
+                    strokeCap = StrokeCap.Round
                 )
                 
                 // Thumb
