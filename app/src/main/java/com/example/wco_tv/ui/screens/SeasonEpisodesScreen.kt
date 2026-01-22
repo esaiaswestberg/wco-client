@@ -39,8 +39,19 @@ fun SeasonEpisodesScreen(
 ) {
     if (cartoonDetails == null) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Error: No Details Loaded", color = Color.Red)
-            Button(onClick = onBack) { Text("Back") }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Error: No Details Loaded", color = Color.Red, style = MaterialTheme.typography.headlineMedium)
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onBack,
+                    colors = ButtonDefaults.colors(
+                        containerColor = CinematicSurface,
+                        focusedContainerColor = CinematicAccent
+                    )
+                ) {
+                    Text("Back", color = CinematicText)
+                }
+            }
         }
         return
     }

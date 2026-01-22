@@ -48,7 +48,8 @@ fun HomeScreen(
     isLoading: Boolean,
     errorMessage: String?,
     onRetry: () -> Unit,
-    onCartoonClick: (Cartoon) -> Unit
+    onCartoonClick: (Cartoon) -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val gridState = rememberTvLazyGridState()
@@ -125,9 +126,22 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = onRetry,
-                    colors = ButtonDefaults.colors(containerColor = CinematicAccent)
+                    colors = ButtonDefaults.colors(
+                        containerColor = CinematicSurface,
+                        focusedContainerColor = CinematicAccent
+                    )
                 ) {
                     Text(text = "Retry Scan", color = CinematicText)
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Button(
+                    onClick = onSettingsClick,
+                    colors = ButtonDefaults.colors(
+                        containerColor = CinematicSurface,
+                        focusedContainerColor = CinematicAccent
+                    )
+                ) {
+                    Text(text = "Settings", color = CinematicText)
                 }
                 if (errorMessage != null) {
                     Spacer(modifier = Modifier.height(20.dp))
@@ -163,28 +177,43 @@ fun HomeScreen(
                         )
                     }
                     
-                    // Search Input (Custom styled)
-                    Box(
-                        modifier = Modifier
-                            .width(350.dp)
-                            .background(CinematicSurface, RoundedCornerShape(50))
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        androidx.compose.foundation.text.BasicTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            textStyle = androidx.compose.ui.text.TextStyle(
-                                color = CinematicText,
-                                fontSize = 16.sp
-                            ),
-                            singleLine = true,
-                            decorationBox = { innerTextField ->
-                                if (searchQuery.isEmpty()) {
-                                    Text("Search cartoons...", color = CinematicTextSecondary.copy(alpha = 0.5f))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Search Input (Custom styled)
+                        Box(
+                            modifier = Modifier
+                                .width(350.dp)
+                                .background(CinematicSurface, RoundedCornerShape(50))
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = CinematicText,
+                                    fontSize = 16.sp
+                                ),
+                                singleLine = true,
+                                decorationBox = { innerTextField ->
+                                    if (searchQuery.isEmpty()) {
+                                        Text("Search cartoons...", color = CinematicTextSecondary.copy(alpha = 0.5f))
+                                    }
+                                    innerTextField()
                                 }
-                                innerTextField()
-                            }
-                        )
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(16.dp))
+                        
+                        Button(
+                            onClick = onSettingsClick,
+                            shape = ButtonDefaults.shape(RoundedCornerShape(50)),
+                            colors = ButtonDefaults.colors(
+                                containerColor = CinematicSurface,
+                                focusedContainerColor = CinematicAccent
+                            )
+                        ) {
+                            Text("Settings", color = CinematicText)
+                        }
                     }
                 }
 

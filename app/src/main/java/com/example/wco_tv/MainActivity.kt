@@ -42,6 +42,8 @@ import com.example.wco_tv.ui.screens.SeasonEpisodesScreen
 import com.example.wco_tv.ui.screens.PlayerScreen
 import com.example.wco_tv.data.remote.TvMazeRepository
 import com.example.wco_tv.data.remote.WcoVideoFetcher
+import com.example.wco_tv.data.local.SettingsManager
+import com.example.wco_tv.ui.screens.SettingsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
@@ -106,12 +108,10 @@ fun AppNavigation() {
             TvMazeRepository.initialize(it)
         }
     }
-    
-    // Scraper State
-    var urlToScrape by remember { mutableStateOf<String?>(null) }
-    var onScrapeResult by remember { mutableStateOf<((String, String?) -> Unit)?>(null) }
+    val settingsManager = remember { SettingsManager(context) }
     
     // Global State
+    var baseUrl by remember { mutableStateOf(settingsManager.getBaseUrl()) }
     var cartoons by remember { mutableStateOf<List<Cartoon>>(emptyList()) }
     var favorites by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isHomeLoading by remember { mutableStateOf(true) }
@@ -124,6 +124,10 @@ fun AppNavigation() {
     var currentQualities by remember { mutableStateOf<List<VideoQuality>>(emptyList()) }
     var currentEpisodeIndex by remember { mutableStateOf(-1) }
 
+    // Scraper State
+    var urlToScrape by remember { mutableStateOf<String?>(null) }
+    var onScrapeResult by remember { mutableStateOf<((String, String?) -> Unit)?>(null) }
+
     // Helper to request HTML
     val requestHtml: (String, (String, String?) -> Unit) -> Unit = { url, callback ->
         urlToScrape = url
@@ -133,11 +137,11 @@ fun AppNavigation() {
     // Reusable function to play an episode
     val playEpisode: (Episode) -> Unit = { episode ->
         isPlayerLoading = true
-        val episodeUrl = if (episode.url.startsWith("http")) episode.url else "https://www.wcoflix.tv${episode.url}"
+        val episodeUrl = if (episode.url.startsWith("http")) episode.url else "$baseUrl${episode.url}"
         Log.d("WCO_TV", "Resolving Episode URL: $episodeUrl")
         
         scope.launch(Dispatchers.IO) {
-            val qualities = WcoVideoFetcher.fetchVideoQualities(episodeUrl)
+            val qualities = WcoVideoFetcher.fetchVideoQualities(episodeUrl, baseUrl)
             launch(Dispatchers.Main) {
                 if (qualities.isNotEmpty()) {
                     Log.d("WCO_TV", "Resolved ${qualities.size} qualities")
@@ -183,7 +187,7 @@ fun AppNavigation() {
                 cartoons = cached
                 isHomeLoading = false
             } else {
-                requestHtml("https://www.wcoflix.tv/cartoon-list") { html, _ ->
+                requestHtml("$baseUrl/cartoon-list") { html, _ ->
                     val list = parseCartoons(html)
                     if (list.isNotEmpty()) {
                         cartoons = list
@@ -203,6 +207,7 @@ fun AppNavigation() {
         Box(modifier = Modifier.size(0.dp)) {
             ScraperWebView(
                 url = urlToScrape!!,
+                baseUrl = baseUrl,
                 onResult = { html, videoUrl ->
                     scope.launch(Dispatchers.Main) {
                         val currentUrl = urlToScrape
@@ -254,7 +259,7 @@ fun AppNavigation() {
                 onRetry = {
                     isHomeLoading = true
                     homeError = null
-                    requestHtml("https://www.wcoflix.tv/cartoon-list") { html, _ ->
+                    requestHtml("$baseUrl/cartoon-list") { html, _ ->
                         val list = parseCartoons(html)
                         if (list.isNotEmpty()) {
                             cartoons = list
@@ -270,7 +275,39 @@ fun AppNavigation() {
                     selectedDetails = null
                     val encodedUrl = URLEncoder.encode(cartoon.link, "UTF-8")
                     navController.navigate("details/$encodedUrl")
+                },
+                onSettingsClick = {
+                    navController.navigate("settings")
                 }
+            )
+        }
+        composable("settings") {
+            SettingsScreen(
+                currentUrl = baseUrl,
+                onUrlSave = { newUrl ->
+                    baseUrl = newUrl
+                    settingsManager.saveBaseUrl(newUrl)
+                    // Clear cartoons and reload
+                    cartoons = emptyList()
+                    isHomeLoading = true
+                    homeError = null
+                    cacheManager.saveCartoons(emptyList()) // Optional: clear cache or keep it? Maybe better to clear if domain changes might affect links, but usually links are relative.
+                    // Actually if we change domain, relative links should work fine with new base.
+                    // But we should reload to be safe and verify connectivity.
+                    requestHtml("$baseUrl/cartoon-list") { html, _ ->
+                        val list = parseCartoons(html)
+                        if (list.isNotEmpty()) {
+                            cartoons = list
+                            cacheManager.saveCartoons(list)
+                            isHomeLoading = false
+                        } else {
+                            homeError = "Failed to load cartoon list."
+                            isHomeLoading = false
+                        }
+                    }
+                    navController.popBackStack()
+                },
+                onBack = { navController.popBackStack() }
             )
         }
         composable(
@@ -280,6 +317,7 @@ fun AppNavigation() {
             val url = backStackEntry.arguments?.getString("url") ?: ""
             DetailsScreen(
                 url = url,
+                baseUrl = baseUrl,
                 isFavorite = selectedDetails?.title?.let { it in favorites } ?: false,
                 onToggleFavorite = { selectedDetails?.title?.let { toggleFavorite(it) } },
                 requestHtml = { u, cb -> requestHtml(u) { h, _ -> cb(h) } },
@@ -292,6 +330,7 @@ fun AppNavigation() {
                 }
             )
         }
+        // ... (rest of NavHost remains similar, check context)
         composable(
             "episodes/{seasonId}",
             arguments = listOf(navArgument("seasonId") { type = NavType.StringType })
@@ -344,13 +383,11 @@ fun AppNavigation() {
     }
 }
 
-// Parsing helpers for video
-// fun parseIframeUrl(html: String): String? { ... } (Removed)
-// fun parseVideoUrl(html: String): String? { ... } (Removed)
+// ...
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun ScraperWebView(url: String, onResult: (String, String?) -> Unit, onError: (String) -> Unit) {
+fun ScraperWebView(url: String, baseUrl: String, onResult: (String, String?) -> Unit, onError: (String) -> Unit) {
     AndroidView(
         factory = { context ->
             WebView(context).apply {
@@ -412,7 +449,7 @@ fun ScraperWebView(url: String, onResult: (String, String?) -> Unit, onError: (S
         update = { webView ->
             if (webView.url != url) {
                 Log.d("WCO_TV", "WebView Update: Loading $url")
-                val headers = mapOf("Referer" to "https://www.wcoflix.tv/")
+                val headers = mapOf("Referer" to "$baseUrl/")
                 // Clear cache to prevent stale player data or 403s
                 webView.clearCache(true)
                 webView.loadUrl(url, headers)
@@ -420,6 +457,7 @@ fun ScraperWebView(url: String, onResult: (String, String?) -> Unit, onError: (S
         }
     )
 }
+
 
 fun parseCartoons(html: String): List<Cartoon> {
     val doc = org.jsoup.Jsoup.parse(html)

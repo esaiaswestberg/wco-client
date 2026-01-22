@@ -38,6 +38,7 @@ import com.example.wco_tv.data.local.CacheManager
 @Composable
 fun DetailsScreen(
     url: String,
+    baseUrl: String,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     requestHtml: (String, (String) -> Unit) -> Unit,
@@ -54,9 +55,9 @@ fun DetailsScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(url) {
-        val fullUrl = if (url.startsWith("http")) url else "https://www.wcoflix.tv$url"
+        val fullUrl = if (url.startsWith("http")) url else "$baseUrl$url"
         requestHtml(fullUrl) { html ->
-            val parsed = parseDetails(html)
+            val parsed = parseDetails(html, baseUrl)
             details = parsed
             isLoading = false
             onDetailsLoaded(parsed)
@@ -259,7 +260,7 @@ fun DetailsScreen(
     }
 }
 
-fun parseDetails(html: String): CartoonDetails {
+fun parseDetails(html: String, baseUrl: String): CartoonDetails {
     val doc = Jsoup.parse(html)
     val title = doc.select("span.dynamic-name").firstOrNull()?.text() ?: 
                 doc.select("div.video-title h1").text().ifEmpty { "Unknown Title" }
@@ -267,7 +268,7 @@ fun parseDetails(html: String): CartoonDetails {
     val imageUrl = doc.select("div#sidebar_cat img.img5").attr("src").let {
         when {
             it.startsWith("//") -> "https:$it"
-            it.startsWith("/") -> "https://www.wcoflix.tv$it"
+            it.startsWith("/") -> "$baseUrl$it"
             else -> it
         }
     }

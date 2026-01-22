@@ -15,7 +15,7 @@ object WcoVideoFetcher {
         .followSslRedirects(true)
         .build()
 
-    fun fetchVideoQualities(episodeUrl: String): List<VideoQuality> {
+    fun fetchVideoQualities(episodeUrl: String, baseUrl: String): List<VideoQuality> {
         return try {
             Log.d("WcoVideoFetcher", "Fetching episode page: $episodeUrl")
             // Step 1: Get Episode Page
@@ -24,7 +24,7 @@ object WcoVideoFetcher {
             Log.d("WcoVideoFetcher", "Found Iframe URL: $iframeUrl")
 
             // Step 2: Get Iframe Page
-            val iframeHtml = makeRequest(iframeUrl, referer = "https://www.wcoflix.tv/") // Assuming wcoflix is the base
+            val iframeHtml = makeRequest(iframeUrl, referer = "$baseUrl/") 
             val getVidLinkPath = parseGetVidLink(iframeHtml) ?: throw Exception("getvidlink API URL not found")
             
             val iframeUri = java.net.URI(iframeUrl)
