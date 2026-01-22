@@ -85,6 +85,7 @@ fun PlayerScreen(
     // Controls Visibility State
     var areControlsVisible by remember { mutableStateOf(true) }
     var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val mainBoxFocusRequester = remember { FocusRequester() }
 
     // Player State for UI
     var isPlaying by remember { mutableStateOf(false) }
@@ -102,6 +103,14 @@ fun PlayerScreen(
         if (areControlsVisible && !isSettingsOpen) {
             delay(10000)
             areControlsVisible = false
+        }
+    }
+
+    // Focus management when controls hide
+    LaunchedEffect(areControlsVisible, isSettingsOpen) {
+        if (!areControlsVisible && !isSettingsOpen) {
+            // Ensure main box has focus when controls are hidden to catch the first key press
+            mainBoxFocusRequester.requestFocus()
         }
     }
 
@@ -228,6 +237,7 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .focusRequester(mainBoxFocusRequester)
             .onKeyEvent { keyEvent ->
                 if (keyEvent.type == KeyEventType.KeyDown && !areControlsVisible && !isSettingsOpen) {
                     when (keyEvent.key) {
@@ -264,6 +274,9 @@ fun PlayerScreen(
                         player = exoPlayer
                         useController = false
                         keepScreenOn = true
+                        // Prevent the native view from stealing focus from Compose
+                        isFocusable = false
+                        isFocusableInTouchMode = false
                     }
                 },
                 modifier = Modifier.fillMaxSize()
@@ -298,6 +311,7 @@ fun PlayerScreen(
                     },
                     onHide = { areControlsVisible = false },
                     onBack = onBack,
+                    isSettingsOpen = isSettingsOpen,
                     modifier = Modifier
                         .focusProperties { canFocus = areControlsVisible && !isSettingsOpen }
                 )
@@ -334,16 +348,19 @@ fun PlayerControls(
     onSettingsClick: () -> Unit,
     onHide: () -> Unit,
     onBack: () -> Unit,
+    isSettingsOpen: Boolean,
     modifier: Modifier = Modifier
 ) {
     val progress = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f
     var isSeekBarFocused by remember { mutableStateOf(false) }
     val seekBarFocusRequester = remember { FocusRequester() }
 
-    // Direct focus to seek bar when controls become visible
-    LaunchedEffect(Unit) {
-        delay(100) // Small delay to ensure it's ready to receive focus
-        seekBarFocusRequester.requestFocus()
+    // Direct focus to seek bar when controls become visible OR when settings are closed
+    LaunchedEffect(isSettingsOpen) {
+        if (!isSettingsOpen) {
+            delay(150) // Delay to ensure it's focusable after settings close/animation
+            seekBarFocusRequester.requestFocus()
+        }
     }
 
     Box(
